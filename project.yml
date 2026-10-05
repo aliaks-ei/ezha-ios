@@ -1,0 +1,110 @@
+# XcodeGen spec. Regenerate EZHA.xcodeproj with `xcodegen generate`.
+name: EZHA
+options:
+  bundleIdPrefix: com.aliaksei
+  deploymentTarget:
+    iOS: "26.0"
+  defaultSourceDirectoryType: syncedFolder
+  developmentLanguage: en
+configFiles:
+  Debug: Config/Shared.xcconfig
+  Release: Config/Shared.xcconfig
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+    DEVELOPMENT_TEAM: KR28FZDJ39
+    CODE_SIGN_STYLE: Automatic
+    TARGETED_DEVICE_FAMILY: "1,2"
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    LOCALIZATION_PREFERS_STRING_CATALOGS: YES
+    SWIFT_EMIT_LOC_STRINGS: YES
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+packages:
+  EZHAKit:
+    path: Packages/EZHAKit
+targets:
+  EZHA:
+    type: application
+    platform: iOS
+    sources:
+      - path: EZHA
+    dependencies:
+      - package: EZHAKit
+      - target: EZHAWidgets
+    info:
+      path: EZHA/Info.plist
+      properties:
+        CFBundleDisplayName: EZHA
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        SUPABASE_URL: $(SUPABASE_URL)
+        SUPABASE_ANON_KEY: $(SUPABASE_ANON_KEY)
+        NSCameraUsageDescription: Take a photo of your meal or a nutrition label to estimate its nutrition.
+        CFBundleURLTypes:
+          - CFBundleURLName: com.aliaksei.ezha
+            CFBundleURLSchemes: [ezha]
+        UILaunchScreen:
+          UIColorName: Canvas
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        NSSupportsLiveActivities: false
+        ITSAppUsesNonExemptEncryption: false
+    entitlements:
+      path: EZHA/EZHA.entitlements
+      properties:
+        com.apple.security.application-groups: [group.com.aliaksei.ezha]
+        com.apple.developer.applesignin: [Default]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.aliaksei.ezha
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+  EZHAWidgets:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: EZHAWidgets
+    dependencies:
+      - package: EZHAKit
+      - sdk: WidgetKit.framework
+      - sdk: SwiftUI.framework
+    info:
+      path: EZHAWidgets/Info.plist
+      properties:
+        CFBundleDisplayName: EZHA
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    entitlements:
+      path: EZHAWidgets/EZHAWidgets.entitlements
+      properties:
+        com.apple.security.application-groups: [group.com.aliaksei.ezha]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.aliaksei.ezha.widgets
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME: WidgetBackground
+schemes:
+  EZHA:
+    build:
+      targets:
+        EZHA: all
+        EZHAWidgets: all
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - package: EZHAKit/EZHAKitTests
+    archive:
+      config: Release

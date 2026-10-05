@@ -1,0 +1,560 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		0EFA9BDE26804354503CC91C /* EZHAKit in Frameworks */ = {isa = PBXBuildFile; productRef = 4AC438C57492CB2C6A94FBF9 /* EZHAKit */; };
+		87AB4A2CD7BC1B39688804FE /* EZHAKit in Frameworks */ = {isa = PBXBuildFile; productRef = BADEF0535F0BA2389C9294DB /* EZHAKit */; };
+		BF9A8AD68EA3B6296C6A6E6D /* EZHAWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 8C175E03E2F90D8D94B89155 /* EZHAWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		D9FF31257BCB5EBFF22C058F /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7392757BE0E440A73BD840CB /* WidgetKit.framework */; };
+		DB0F52459E3B308FB0A93BE2 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5EEB0FB830D1FD8B3B196545 /* SwiftUI.framework */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		7B98D5789213BFEA4B80503D /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 2D074CD5E8A9ECE46A30F247 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 1359AB9CFC236479BEF6AE0D;
+			remoteInfo = EZHAWidgets;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		EA21F2F8A42E9E0DBD5D9F4D /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				BF9A8AD68EA3B6296C6A6E6D /* EZHAWidgets.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		51FE1BFEA346DD0EB43A29C6 /* EZHAKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = EZHAKit; path = Packages/EZHAKit; sourceTree = SOURCE_ROOT; };
+		5EEB0FB830D1FD8B3B196545 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
+		7392757BE0E440A73BD840CB /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
+		89FB2A3672E9766BF286AD11 /* Shared.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Shared.xcconfig; sourceTree = "<group>"; };
+		8C175E03E2F90D8D94B89155 /* EZHAWidgets.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = EZHAWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		AB395FD99030C7BD75F9B75D /* EZHA.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = EZHA.app; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		0EE168A985B5C13E585ACC3A /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = DCD5D88FDDD98FE40C426CDD /* EZHA */;
+		};
+		78277D65FC87A0BE824EB6CB /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 1359AB9CFC236479BEF6AE0D /* EZHAWidgets */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		57BAE1FF4B0913D26F91A867 /* EZHAWidgets */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				78277D65FC87A0BE824EB6CB /* PBXFileSystemSynchronizedBuildFileExceptionSet */,
+			);
+			explicitFileTypes = {
+			};
+			explicitFolders = (
+			);
+			path = EZHAWidgets;
+			sourceTree = "<group>";
+		};
+		A55F0B8941FE4FCAC9BA2FC7 /* EZHA */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				0EE168A985B5C13E585ACC3A /* PBXFileSystemSynchronizedBuildFileExceptionSet */,
+			);
+			explicitFileTypes = {
+			};
+			explicitFolders = (
+			);
+			path = EZHA;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		349A49997CA0D944792FECC0 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				0EFA9BDE26804354503CC91C /* EZHAKit in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		4FF894D64433AE185531BD3E /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				87AB4A2CD7BC1B39688804FE /* EZHAKit in Frameworks */,
+				D9FF31257BCB5EBFF22C058F /* WidgetKit.framework in Frameworks */,
+				DB0F52459E3B308FB0A93BE2 /* SwiftUI.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		06970A618EE64B42D6E4D6D6 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				5EEB0FB830D1FD8B3B196545 /* SwiftUI.framework */,
+				7392757BE0E440A73BD840CB /* WidgetKit.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		2D3FB14F4E6CCAD7AF9E33D0 /* Packages */ = {
+			isa = PBXGroup;
+			children = (
+				51FE1BFEA346DD0EB43A29C6 /* EZHAKit */,
+			);
+			path = Packages;
+			sourceTree = "<group>";
+		};
+		420C188D26DD743F85449732 = {
+			isa = PBXGroup;
+			children = (
+				AB31347AA74785D706814DF1 /* Config */,
+				A55F0B8941FE4FCAC9BA2FC7 /* EZHA */,
+				57BAE1FF4B0913D26F91A867 /* EZHAWidgets */,
+				2D3FB14F4E6CCAD7AF9E33D0 /* Packages */,
+				06970A618EE64B42D6E4D6D6 /* Frameworks */,
+				620F62B5AD1F5F8C4A87F66F /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		620F62B5AD1F5F8C4A87F66F /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				AB395FD99030C7BD75F9B75D /* EZHA.app */,
+				8C175E03E2F90D8D94B89155 /* EZHAWidgets.appex */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		AB31347AA74785D706814DF1 /* Config */ = {
+			isa = PBXGroup;
+			children = (
+				89FB2A3672E9766BF286AD11 /* Shared.xcconfig */,
+			);
+			path = Config;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		1359AB9CFC236479BEF6AE0D /* EZHAWidgets */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 58B802DD8B361F030F3B92A0 /* Build configuration list for PBXNativeTarget "EZHAWidgets" */;
+			buildPhases = (
+				708C2D8731C6C53105F74071 /* Sources */,
+				98B9FE2596234BC2128EAF1D /* Resources */,
+				4FF894D64433AE185531BD3E /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				57BAE1FF4B0913D26F91A867 /* EZHAWidgets */,
+			);
+			name = EZHAWidgets;
+			packageProductDependencies = (
+				BADEF0535F0BA2389C9294DB /* EZHAKit */,
+			);
+			productName = EZHAWidgets;
+			productReference = 8C175E03E2F90D8D94B89155 /* EZHAWidgets.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+		DCD5D88FDDD98FE40C426CDD /* EZHA */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 84DD4F9CADD195F6D393BAF7 /* Build configuration list for PBXNativeTarget "EZHA" */;
+			buildPhases = (
+				F17E233A44714BB72CBAD64D /* Sources */,
+				9FBBB86105AF6E49B4CDE25F /* Resources */,
+				349A49997CA0D944792FECC0 /* Frameworks */,
+				EA21F2F8A42E9E0DBD5D9F4D /* Embed Foundation Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				945E2592732B18313B5D401A /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				A55F0B8941FE4FCAC9BA2FC7 /* EZHA */,
+			);
+			name = EZHA;
+			packageProductDependencies = (
+				4AC438C57492CB2C6A94FBF9 /* EZHAKit */,
+			);
+			productName = EZHA;
+			productReference = AB395FD99030C7BD75F9B75D /* EZHA.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		2D074CD5E8A9ECE46A30F247 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					1359AB9CFC236479BEF6AE0D = {
+						DevelopmentTeam = KR28FZDJ39;
+						ProvisioningStyle = Automatic;
+					};
+					DCD5D88FDDD98FE40C426CDD = {
+						DevelopmentTeam = KR28FZDJ39;
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = EF6FA28F476E1335AD229469 /* Build configuration list for PBXProject "EZHA" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 420C188D26DD743F85449732;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				752167B74617AF6033E1EB89 /* XCLocalSwiftPackageReference "Packages/EZHAKit" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 620F62B5AD1F5F8C4A87F66F /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				DCD5D88FDDD98FE40C426CDD /* EZHA */,
+				1359AB9CFC236479BEF6AE0D /* EZHAWidgets */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		98B9FE2596234BC2128EAF1D /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		9FBBB86105AF6E49B4CDE25F /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		708C2D8731C6C53105F74071 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F17E233A44714BB72CBAD64D /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		945E2592732B18313B5D401A /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 1359AB9CFC236479BEF6AE0D /* EZHAWidgets */;
+			targetProxy = 7B98D5789213BFEA4B80503D /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		01ABB32ECDB28A8763D7E55C /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = EZHA/EZHA.entitlements;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				INFOPLIST_FILE = EZHA/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.aliaksei.ezha;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		41DCDC0AE3863FCAF663627C /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_ENTITLEMENTS = EZHAWidgets/EZHAWidgets.entitlements;
+				INFOPLIST_FILE = EZHAWidgets/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.aliaksei.ezha.widgets;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		43858ECDEE2F379A131A94D4 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 89FB2A3672E9766BF286AD11 /* Shared.xcconfig */;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = KR28FZDJ39;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MARKETING_VERSION = 1.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		92B39B75CD55FBF954794393 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_ENTITLEMENTS = EZHAWidgets/EZHAWidgets.entitlements;
+				INFOPLIST_FILE = EZHAWidgets/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.aliaksei.ezha.widgets;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		B0EC4E1FFBF5EDBF4DEF30C8 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 89FB2A3672E9766BF286AD11 /* Shared.xcconfig */;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = KR28FZDJ39;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MARKETING_VERSION = 1.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		B4B77C32AC1129C68EC815DC /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = EZHA/EZHA.entitlements;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				INFOPLIST_FILE = EZHA/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.aliaksei.ezha;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		58B802DD8B361F030F3B92A0 /* Build configuration list for PBXNativeTarget "EZHAWidgets" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				92B39B75CD55FBF954794393 /* Debug */,
+				41DCDC0AE3863FCAF663627C /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		84DD4F9CADD195F6D393BAF7 /* Build configuration list for PBXNativeTarget "EZHA" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				01ABB32ECDB28A8763D7E55C /* Debug */,
+				B4B77C32AC1129C68EC815DC /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		EF6FA28F476E1335AD229469 /* Build configuration list for PBXProject "EZHA" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				43858ECDEE2F379A131A94D4 /* Debug */,
+				B0EC4E1FFBF5EDBF4DEF30C8 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		752167B74617AF6033E1EB89 /* XCLocalSwiftPackageReference "Packages/EZHAKit" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/EZHAKit;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		4AC438C57492CB2C6A94FBF9 /* EZHAKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = EZHAKit;
+		};
+		BADEF0535F0BA2389C9294DB /* EZHAKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = EZHAKit;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 2D074CD5E8A9ECE46A30F247 /* Project object */;
+}
