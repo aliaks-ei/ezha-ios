@@ -46,15 +46,15 @@ struct MacroFields: View {
   @Binding var model: MacroFieldsModel
 
   var body: some View {
-    row("Calories", unit: "kcal", text: $model.calories)
-    row("Protein", unit: "g", text: $model.protein)
-    row("Carbs", unit: "g", text: $model.carbs)
-    row("Fat", unit: "g", text: $model.fat)
+    row("Calories", unit: "kcal", id: "caloriesField", text: $model.calories)
+    row("Protein", unit: "g", id: "proteinField", text: $model.protein)
+    row("Carbs", unit: "g", id: "carbsField", text: $model.carbs)
+    row("Fat", unit: "g", id: "fatField", text: $model.fat)
   }
 
-  private func row(_ title: LocalizedStringKey, unit: LocalizedStringKey, text: Binding<String>)
-    -> some View
-  {
+  private func row(
+    _ title: LocalizedStringKey, unit: LocalizedStringKey, id: String, text: Binding<String>
+  ) -> some View {
     LabeledContent {
       HStack(spacing: 4) {
         TextField(title, text: text, prompt: Text(verbatim: "0"))
@@ -62,6 +62,7 @@ struct MacroFields: View {
           .multilineTextAlignment(.trailing)
           .fontDesign(.rounded)
           .monospacedDigit()
+          .accessibilityIdentifier(id)
         Text(unit).foregroundStyle(.secondary)
       }
     } label: {

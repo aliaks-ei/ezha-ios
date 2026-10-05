@@ -2,7 +2,7 @@
 
 ## Status
 
-Phase 8 — Library. Next step: Library tab list (search, filters, favorites, swipe actions, context menu), quick log sheet, food editor, meal editor, add food (photo/manual) with the duplicate dialog.
+Phase 9 — Suggestions. Next step: Suggestions tab (remaining macros header, form, Get suggestions, More menu, cards with warning and \"Log this\"), clear on day change.
 
 ## Done
 
@@ -21,6 +21,8 @@ Phase 8 — Library. Next step: Library tab list (search, filters, favorites, sw
 - Phase 6 — shell and Today. Verified: lint clean; `xcodebuild … build test` 59/59 passed; scratch XCUITest `TodayTests` against local Supabase with a seeded user passed: Today shows the seeded meals, swipe right goes to yesterday and back, swipe forward stops at today, the calendar popover opens, choosing "Cut" asks for confirmation and updates the target row, swipe delete hides the row with an "Undo" toast, Undo restores it, a second delete reaches the server after 5 s, pull to refresh shows a server-side entry, and a relaunch against an unreachable server shows cached Today with the "Try again" banner. Screenshots checked in light and dark mode.
 
 - Phase 7 — logger. Verified: lint clean; `xcodebuild … build test` 61/61 passed (new `ImageProcessingTests`: 3000×2000 becomes 1400×933 and GPS is removed); scratch XCUITest `LoggerTests` against local Supabase with a mock OpenAI server passed: text estimate with the consent sheet, the stale-input note and "Estimate nutrition" after editing the text, re-estimate and log; library-only log; photo-only log (Photos picker); photo + text as a nutrition label with 50 g eaten (442 kcal/100 g became 221 kcal); text + library. The server rows were `text/text`, `text/library`, `photo/food_photo` with an image path, `photo+text/label_photo` with an image path, and a `text/text` entry that includes the Oats library item. A draft with text and a photo survived an app kill.
+
+- Phase 8 — library. Verified: lint clean; `xcodebuild … build test` 61/61 passed; scratch XCUITest `LibraryTests` against local Supabase passed: a per-serving food (150 g cup) opens quick log at 150 g / 90 kcal and logs; a saved meal opens at 1 portion / 328 kcal, + makes 1.5 portions / 492 kcal and logs (server rows "Greek yogurt cup" 90 and "Overnight oats" 492); adding "oats" asks about the existing "Oats", Update existing keeps one food with the new 400 kcal; adding "OATS" with Create new makes a second; leading swipe favorites and the Favorites filter shows only it; the context menu Edit renames a meal; Add food › Photo estimates and saves "Chicken and rice". Screenshots checked in light and dark mode.
 
 ## Decisions
 
@@ -76,6 +78,10 @@ Phase 8 — Library. Next step: Library tab list (search, filters, favorites, sw
 - A new photo gets a new entry id, so the storage path `<user_id>/<entry_id>.jpg` stays unique with `upsert: false`. An "already exists" upload error reuses that path.
 - Label overrides edit the first AI item when the latest estimate came from a label.
 - Attachment buttons are an icon over a short label in one row, falling back to a horizontal scroll at large text sizes.
+- Confirmation dialogs pass their data through `presenting:`. Reading `@State` inside a dialog or sheet action is unsafe: dismissing clears the binding first. This fixed two bugs (AI consent "Allow" did nothing, duplicate "Update existing" did nothing).
+- Add food › Photo uploads the photo under a random UUID name (`<user_id>/<uuid>.jpg`), because there is no entry. A non-label photo saves its display macros as per 100 g, like the PWA's `buildPhotoLibraryDraft`.
+- The meal editor edits ingredients as logger items (per 100 g), so changing grams scales the macros. New ingredients come from saved foods at their default grams.
+- Library deletes use a confirmation dialog and have no undo (guide 8.6).
 
 ## Handoff
 

@@ -17,7 +17,7 @@ struct MainShell: View {
         SuggestionsPlaceholder()
       }
       Tab("Library", systemImage: "books.vertical", value: AppModel.Tab.library) {
-        SuggestionsPlaceholder()
+        LibraryView()
       }
       Tab("Settings", systemImage: "gearshape", value: AppModel.Tab.settings) {
         SuggestionsPlaceholder()
