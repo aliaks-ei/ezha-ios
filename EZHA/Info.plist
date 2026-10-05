@@ -42,6 +42,8 @@
 	<string>Take a photo of your meal or a nutrition label to estimate its nutrition.</string>
 	<key>NSSupportsLiveActivities</key>
 	<false/>
+	<key>PRIVACY_POLICY_URL</key>
+	<string>$(PRIVACY_POLICY_URL)</string>
 	<key>SUPABASE_ANON_KEY</key>
 	<string>$(SUPABASE_ANON_KEY)</string>
 	<key>SUPABASE_URL</key>

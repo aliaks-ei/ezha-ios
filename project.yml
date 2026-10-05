@@ -41,6 +41,7 @@ targets:
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         SUPABASE_URL: $(SUPABASE_URL)
         SUPABASE_ANON_KEY: $(SUPABASE_ANON_KEY)
+        PRIVACY_POLICY_URL: $(PRIVACY_POLICY_URL)
         NSCameraUsageDescription: Take a photo of your meal or a nutrition label to estimate its nutrition.
         CFBundleURLTypes:
           - CFBundleURLName: com.aliaksei.ezha

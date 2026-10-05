@@ -1,3 +1,7 @@
 // Shared build settings. Secrets live in the git-ignored Secrets.xcconfig.
 // Copy Secrets.example.xcconfig to Secrets.xcconfig and fill in the values.
 #include? "Secrets.xcconfig"
+
+// Shown as "Privacy policy" in Settings › About. Hidden while empty.
+// Write `https:/$()/` for `https://`.
+PRIVACY_POLICY_URL =

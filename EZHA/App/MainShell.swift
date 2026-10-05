@@ -20,7 +20,7 @@ struct MainShell: View {
         LibraryView()
       }
       Tab("Settings", systemImage: "gearshape", value: AppModel.Tab.settings) {
-        SuggestionsPlaceholder()
+        SettingsView()
       }
     }
     .tabBarMinimizeBehavior(.onScrollDown)
@@ -92,18 +92,5 @@ struct LogAccessory: View {
     }
     .buttonStyle(.plain)
     .accessibilityIdentifier("logAccessory")
-  }
-}
-
-/// Placeholder for tabs built in later phases.
-struct SuggestionsPlaceholder: View {
-  @Environment(AppModel.self) private var appModel
-
-  var body: some View {
-    NavigationStack {
-      List {
-        Button("Sign out", role: .destructive) { Task { await appModel.signOut() } }
-      }
-    }
   }
 }

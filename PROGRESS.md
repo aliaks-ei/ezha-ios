@@ -2,7 +2,7 @@
 
 ## Status
 
-Phase 10 — Settings, privacy, account. Next step: Settings form (targets, appearance, AI consent, Sync section, account with sign out and delete account, about), then verify account deletion on local Supabase.
+Phase 11 — Widgets and intents. Next step: widget families from WidgetSnapshot, Control Center control, App Intents (OpenLoggerIntent, CaloriesLeftIntent), AppShortcutsProvider, then previews and the ezha://log check.
 
 ## Done
 
@@ -25,6 +25,8 @@ Phase 10 — Settings, privacy, account. Next step: Settings form (targets, appe
 - Phase 8 — library. Verified: lint clean; `xcodebuild … build test` 61/61 passed; scratch XCUITest `LibraryTests` against local Supabase passed: a per-serving food (150 g cup) opens quick log at 150 g / 90 kcal and logs; a saved meal opens at 1 portion / 328 kcal, + makes 1.5 portions / 492 kcal and logs (server rows "Greek yogurt cup" 90 and "Overnight oats" 492); adding "oats" asks about the existing "Oats", Update existing keeps one food with the new 400 kcal; adding "OATS" with Create new makes a second; leading swipe favorites and the Favorites filter shows only it; the context menu Edit renames a meal; Add food › Photo estimates and saves "Chicken and rice". Screenshots checked in light and dark mode.
 
 - Phase 9 — suggestions. Verified: lint clean; `xcodebuild … build test` 61/61 passed; scratch XCUITest `SuggestionsTests` against local Supabase and the mock passed: with 460/20/50/20 remaining, the cards show "Exceeds calories by 190 kcal, protein by 25 g, carbs by 10 g, fat by 2 g" and "Exceeds protein by 12 g" with the hint; More › Other options regenerates; "Log this" opens the logger with "Turkey wrap: Whole wheat wrap with turkey and salad." and the primary button still says Estimate; switching to yesterday clears the results. Screenshots checked in light and dark mode.
+
+- Phase 10 — settings, privacy, account. Verified: lint clean; `xcodebuild … build test` 61/61 passed; scratch XCUITest `SettingsTests` against local Supabase passed: add and swipe-delete a target, appearance switch, then a relaunch against an unreachable server logged a library meal offline ("Saved on this device…" toast, a "Waiting to sync" row, the "Includes 1 meal waiting to sync" footnote, and a Settings › Sync row), and a relaunch online synced it (badge gone, server row present). Delete account with the two-step confirmation returned to Auth; the same email could no longer sign in; `psql` showed 0 storage objects under the user's folder and 0 auth, entry, and food rows.
 
 ## Decisions
 
@@ -86,6 +88,10 @@ Phase 10 — Settings, privacy, account. Next step: Settings form (targets, appe
 - Library deletes use a confirmation dialog and have no undo (guide 8.6).
 - "Log this" fills the logger text only when the day's draft has no text, so an existing draft is not overwritten.
 - Warnings compare against the remaining macros at the time of the request, like the PWA.
+- The privacy policy row reads `PRIVACY_POLICY_URL` (Info.plist from `Config/Shared.xcconfig`) and is hidden while empty, because there is no policy URL yet.
+- Sign out with pending outbox items asks first ("N changes waiting to sync will be lost"), then clears the outbox, drafts, caches, and the widget snapshot.
+- Delete account uses a confirmation dialog, then an alert ("This cannot be undone."), as the two steps.
+- The Sync section shows each item's last error, or "Waiting to sync", or the next retry time and attempt count.
 
 ## Handoff
 
@@ -93,6 +99,7 @@ Phase 10 — Settings, privacy, account. Next step: Settings form (targets, appe
 2. Supabase dashboard › Authentication › Sign In / Providers › Apple: turn it on and put `com.aliaksei.ezha` in "Client IDs". Native Sign in with Apple needs only the bundle ID; the Services ID and secret key are only for web OAuth.
 3. Sign in with Apple needs a paid Apple Developer Program membership. The free Personal Team cannot sign the capability (see the Phase 12 device notes).
 4. Google is already on for the PWA. No change needed beyond the redirect URL in step 1. The Google Cloud OAuth client must keep `https://eixwgqtyeaehczasvjup.supabase.co/auth/v1/callback` as an authorized redirect URI.
+6. Set `PRIVACY_POLICY_URL` in `Config/Shared.xcconfig` once a privacy policy is published (App Store requirement). Write `https:/$()/` for `https://`.
 5. On the iPhone, after steps 1–3: sign in with Apple and with Google, and confirm both land on Today (or onboarding for a new account).
 
 ## Follow-ups
