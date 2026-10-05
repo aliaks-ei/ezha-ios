@@ -2,7 +2,7 @@
 
 ## Status
 
-Phase 5 — Auth and onboarding. Next step: AppModel with session state, Auth screen (Apple, Google, email sheet, reset), deep links, onboarding, session restore without an auth flash.
+Phase 6 — Shell and Today. Next step: TabView with the log accessory, DayStore (cache-first, pending outbox rows), Today screen, entry detail, swipe delete with undo, target sheet, day boundary handling.
 
 ## Done
 
@@ -15,6 +15,8 @@ Phase 5 — Auth and onboarding. Next step: AppModel with session state, Auth sc
 - Phase 3 — domain port. Verified: lint clean; `xcodebuild … build test` ran 52 Swift Testing tests in 10 suites, all passed. Rules 5.1–5.9 and 5.11 have tests. 5.10 (last target, target change) is covered by the SQL checks; 5.12 (image resize) gets its test with the image code in Phase 7.
 
 - Phase 4 — data and sync. Verified: lint clean; `xcodebuild … build test` ran 59 tests in 11 suites (7 new `OutboxTests`), all passed; a scratch Swift executable using the live clients against local Supabase signed up a user, saved a target, added a food, logged an entry twice (one entry kept), fetched the day (totals 260 kcal, goals 2100), found the duplicate food, saved a meal, deleted the entry, and deleted the account.
+
+- Phase 5 — auth and onboarding. Verified: lint clean; `xcodebuild … build test` 59/59 passed; a scratch XCUITest against local Supabase signed up by email, saw onboarding (target prefilled 2100/140/220/70, "Macros add up to 2070 kcal"), allowed AI, reached the signed-in shell, relaunched into the signed-in shell with no auth screen, signed out to Auth, and signed back in without onboarding. Screenshots of Auth checked in light and dark mode.
 
 ## Decisions
 
@@ -51,12 +53,19 @@ Phase 5 — Auth and onboarding. Next step: AppModel with session state, Auth sc
 - RPC parameters use one dictionary-based `RPCParams` encoder. Optional values encode as JSON null.
 - supabase-swift 2.55.3 API names matched the guide: `signInWithIdToken(credentials: OpenIDConnectCredentials(provider: .apple, idToken:nonce:))`, `signInWithOAuth(provider:redirectTo:)` (ASWebAuthenticationSession variant), `session(from:)`, `resetPasswordForEmail(_:redirectTo:)`, `authStateChanges`. Client option `emitLocalSessionAsInitialSession: true` is set, as the library now asks.
 - Debug-only environment overrides `EZHA_SUPABASE_URL` / `EZHA_SUPABASE_ANON_KEY` also work for `swift run` on macOS.
+- UI checks run through a scratch XCUITest target that is not committed: a second XcodeGen spec in the session scratchpad includes `project.yml` and adds `EZHAUITests`. The guide lists no UI tests in section 10.
+- Onboarding shows when the user's only target is all zeros. The consent step is skipped when consent was already decided on this device. Existing users with real targets skip onboarding and see the consent sheet before their first AI action.
+- AI consent is stored per device in `UserDefaults` (`aiConsent`: undecided / allowed / declined).
+- The Auth screen uses white title text and a black Sign in with Apple button in both modes, because the brand gradient is bright in both.
+- `NSAllowsLocalNetworking` is on so the Simulator can reach local Supabase over http.
+- Sign-out clears the file cache and the widget snapshot. Drafts and the outbox are handled in Settings (Phase 10).
 
 ## Handoff
 
 1. Supabase dashboard › Authentication › URL Configuration › Redirect URLs: add `ezha://login-callback` and `ezha://reset-password`. Without them, Google sign-in and the password reset link fall back to the Site URL and do not open the app.
 2. Supabase dashboard › Authentication › Sign In / Providers › Apple: turn it on and put `com.aliaksei.ezha` in "Client IDs". Native Sign in with Apple needs only the bundle ID; the Services ID and secret key are only for web OAuth.
 3. Sign in with Apple needs a paid Apple Developer Program membership. The free Personal Team cannot sign the capability (see the Phase 12 device notes).
+5. On the iPhone, after steps 1–3: sign in with Apple and with Google, and confirm both land on Today (or onboarding for a new account).
 4. Google is already on for the PWA. No change needed beyond the redirect URL in step 1. The Google Cloud OAuth client must keep `https://eixwgqtyeaehczasvjup.supabase.co/auth/v1/callback` as an authorized redirect URI.
 
 ## Follow-ups

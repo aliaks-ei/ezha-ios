@@ -58,6 +58,8 @@ targets:
           - UIInterfaceOrientationLandscapeRight
         NSSupportsLiveActivities: false
         ITSAppUsesNonExemptEncryption: false
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
     entitlements:
       path: EZHA/EZHA.entitlements
       properties:
