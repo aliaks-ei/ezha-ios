@@ -2,7 +2,7 @@
 
 ## Status
 
-Phase 3 — Domain port. Next step: port section 5 rules into `Packages/EZHAKit/Sources/EZHAKit/Domain` and the tests from 10.1/10.2 (not outbox).
+Phase 4 — Data and sync. Next step: feature clients (DayClient, LoggingClient, LibraryClient, TargetsClient, AIClient, AccountClient), then FileCache, NetworkMonitor, Outbox, DraftStore, SnapshotStore, outbox tests, and the local integration smoke test.
 
 ## Done
 
@@ -11,6 +11,8 @@ Phase 3 — Domain port. Next step: port section 5 rules into `Packages/EZHAKit/
 - Phase 1 — backend RPCs. Verified: `supabase/tests/rpc_checks.sql` passes all 20 checks on local (`docker exec -i supabase_db_ezha-ios psql -U postgres -v ON_ERROR_STOP=1 < supabase/tests/rpc_checks.sql`); local `delete-account` run removed the user's storage folder and the user could not sign in again; `supabase db push` applied `20261005120000_ios_rpcs.sql`; `supabase migration list --linked` shows 11/11 in sync; functions deployed; deployed `ai-estimate` and `ai-suggestions` return 400 for `{}`; remote backfill left 0 of 8 users without a profile, target, or active target; remote `get_day` works for the test user.
 
 - Phase 2 — project skeleton. Verified: `swift format lint --recursive --strict .` clean; `xcodebuild -scheme EZHA -destination 'platform=iOS Simulator,name=EZHA iPhone 17 Pro' build test` succeeded; app launched in the Simulator in light and dark mode and showed the placeholder root view with the Supabase host read from Info.plist.
+
+- Phase 3 — domain port. Verified: lint clean; `xcodebuild … build test` ran 52 Swift Testing tests in 10 suites, all passed. Rules 5.1–5.9 and 5.11 have tests. 5.10 (last target, target change) is covered by the SQL checks; 5.12 (image resize) gets its test with the image code in Phase 7.
 
 ## Decisions
 
@@ -35,6 +37,12 @@ Phase 3 — Domain port. Next step: port section 5 rules into `Packages/EZHAKit/
 - `SUPABASE_URL` in xcconfig is written as `https:/$()/…`, because xcconfig treats `//` as a comment.
 - Debug builds accept `EZHA_SUPABASE_URL` and `EZHA_SUPABASE_ANON_KEY` environment overrides (`SIMCTL_CHILD_` prefix with `simctl launch`), to test against local Supabase without a rebuild.
 - `.swift-format` is the default configuration from `swift format dump-configuration` (2 spaces, 100 columns). Build with the default DerivedData location: a DerivedData folder inside the repo makes the lint scan dependency sources.
+- Entry totals in `EntryPayload.build` are the sum of the saved rows. The PWA summed all log items, so an item with no name still counted in the total but was not saved. The rows sum keeps the entry and its items consistent.
+- `SSEParser` takes raw text chunks and splits lines itself. `URLSession.AsyncBytes.lines` drops empty lines, and SSE blocks end with an empty line, so the client reads bytes and feeds whole lines.
+- `LibraryFilter.sorted` uses `localizedStandardCompare` for names (case-insensitive, natural number order).
+- The serving unit defaults to "serving" when empty (guide 5.7). The PWA stored null.
+- `AnalyzeGate.logBlockReason` adds "Add at least one item with grams before logging." when there is no valid item (the guide asks to require one but gives no text).
+- Logger item builders keep the PWA notes ("Added from library food", "Added from saved meal"). The missing-nutrition note is "Missing nutrition" instead of the PWA's "[PLACEHOLDER] …" text.
 
 ## Handoff
 
