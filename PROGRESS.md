@@ -2,7 +2,7 @@
 
 ## Status
 
-Phase 4 — Data and sync. Next step: feature clients (DayClient, LoggingClient, LibraryClient, TargetsClient, AIClient, AccountClient), then FileCache, NetworkMonitor, Outbox, DraftStore, SnapshotStore, outbox tests, and the local integration smoke test.
+Phase 5 — Auth and onboarding. Next step: AppModel with session state, Auth screen (Apple, Google, email sheet, reset), deep links, onboarding, session restore without an auth flash.
 
 ## Done
 
@@ -13,6 +13,8 @@ Phase 4 — Data and sync. Next step: feature clients (DayClient, LoggingClient,
 - Phase 2 — project skeleton. Verified: `swift format lint --recursive --strict .` clean; `xcodebuild -scheme EZHA -destination 'platform=iOS Simulator,name=EZHA iPhone 17 Pro' build test` succeeded; app launched in the Simulator in light and dark mode and showed the placeholder root view with the Supabase host read from Info.plist.
 
 - Phase 3 — domain port. Verified: lint clean; `xcodebuild … build test` ran 52 Swift Testing tests in 10 suites, all passed. Rules 5.1–5.9 and 5.11 have tests. 5.10 (last target, target change) is covered by the SQL checks; 5.12 (image resize) gets its test with the image code in Phase 7.
+
+- Phase 4 — data and sync. Verified: lint clean; `xcodebuild … build test` ran 59 tests in 11 suites (7 new `OutboxTests`), all passed; a scratch Swift executable using the live clients against local Supabase signed up a user, saved a target, added a food, logged an entry twice (one entry kept), fetched the day (totals 260 kcal, goals 2100), found the duplicate food, saved a meal, deleted the entry, and deleted the account.
 
 ## Decisions
 
@@ -43,6 +45,12 @@ Phase 4 — Data and sync. Next step: feature clients (DayClient, LoggingClient,
 - The serving unit defaults to "serving" when empty (guide 5.7). The PWA stored null.
 - `AnalyzeGate.logBlockReason` adds "Add at least one item with grams before logging." when there is no valid item (the guide asks to require one but gives no text).
 - Logger item builders keep the PWA notes ("Added from library food", "Added from saved meal"). The missing-nutrition note is "Missing nutrition" instead of the PWA's "[PLACEHOLDER] …" text.
+- Edge functions are called with `URLSession` directly (`FunctionCaller`), not `supabase.functions`, to stream bytes and apply the 401 rule (refresh once, retry once, else sign out with "Your session expired. Please log in again.").
+- `PendingMutation` has two fields beyond the guide: `entityId` (the entry id, to find a pending log for undo and pending deletes) and `dateKey` (to merge pending rows into the right day).
+- Outbox runs stop at the first network error (the rest would fail too). Other errors keep the item with `lastError`, back off, and the run continues with the next item.
+- RPC parameters use one dictionary-based `RPCParams` encoder. Optional values encode as JSON null.
+- supabase-swift 2.55.3 API names matched the guide: `signInWithIdToken(credentials: OpenIDConnectCredentials(provider: .apple, idToken:nonce:))`, `signInWithOAuth(provider:redirectTo:)` (ASWebAuthenticationSession variant), `session(from:)`, `resetPasswordForEmail(_:redirectTo:)`, `authStateChanges`. Client option `emitLocalSessionAsInitialSession: true` is set, as the library now asks.
+- Debug-only environment overrides `EZHA_SUPABASE_URL` / `EZHA_SUPABASE_ANON_KEY` also work for `swift run` on macOS.
 
 ## Handoff
 
