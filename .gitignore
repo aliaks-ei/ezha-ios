@@ -1,0 +1,14 @@
+# Xcode
+DerivedData/
+build/
+*.xcuserstate
+xcuserdata/
+.swiftpm/
+.build/
+
+# Secrets
+Config/Secrets.xcconfig
+.local/
+.env
+
+.DS_Store
