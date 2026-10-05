@@ -2,7 +2,9 @@ import Foundation
 
 /// A day as `yyyy-MM-dd` in the device's calendar and time zone. Never UTC.
 /// Port of `src/lib/date.ts` and `src/lib/day-navigation.ts`.
-public struct DateKey: Codable, Sendable, Hashable, Comparable, CustomStringConvertible {
+public struct DateKey: Codable, Sendable, Hashable, Comparable, Identifiable,
+  CustomStringConvertible
+{
   public let rawValue: String
 
   /// Returns nil when the string is not a real `yyyy-MM-dd` date.
@@ -76,6 +78,8 @@ public struct DateKey: Codable, Sendable, Hashable, Comparable, CustomStringConv
   }
 
   public var description: String { rawValue }
+
+  public var id: String { rawValue }
 
   public static func < (lhs: DateKey, rhs: DateKey) -> Bool { lhs.rawValue < rhs.rawValue }
 

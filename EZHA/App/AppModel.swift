@@ -1,6 +1,7 @@
 import EZHAKit
 import Foundation
 import Observation
+import SwiftData
 
 /// Session state, the selected day, AI consent, and deep link routing.
 @MainActor
@@ -45,13 +46,52 @@ final class AppModel {
   }
   var isAIConsentGiven: Bool { aiConsent == .allowed }
 
+  var toast: ToastMessage?
+
   let clients: AppClients
   let cache = FileCache()
+  let sync: SyncEngine
+  let dayStore: DayStore
+  let targetsStore: TargetsStore
 
-  init(clients: AppClients) {
+  init(clients: AppClients, inMemory: Bool = false) {
     self.clients = clients
     let stored = UserDefaults.standard.string(forKey: "aiConsent") ?? ""
     aiConsent = AIConsent(rawValue: stored) ?? .undecided
+    let container: ModelContainer
+    do {
+      container = try LocalStore.makeContainer(inMemory: inMemory)
+    } catch {
+      // The outbox must not silently lose data; fail loudly instead of running without it.
+      fatalError("Could not open the local store: \(error)")
+    }
+    sync = SyncEngine(container: container, clients: clients)
+    dayStore = DayStore(clients: clients, cache: cache, sync: sync)
+    targetsStore = TargetsStore(clients: clients, cache: cache)
+    dayStore.today = { [weak self] in self?.today ?? .today() }
+    targetsStore.today = dayStore.today
+    targetsStore.onChange = { [weak self] in
+      guard let self else { return }
+      dayStore.invalidate()
+      await dayStore.load(selectedDate, force: true)
+    }
+    sync.onSynced = { [weak self] dates in
+      for date in dates { await self?.dayStore.load(date, force: true) }
+    }
+  }
+
+  func showToast(_ text: String, actionTitle: String? = nil, action: (@MainActor () -> Void)? = nil)
+  {
+    toast = ToastMessage(text: text, actionTitle: actionTitle, action: action)
+  }
+
+  /// Moves to the new day when midnight passes while the user is on today.
+  func refreshToday() {
+    let now = DateKey.today()
+    guard now != today else { return }
+    let wasOnToday = selectedDate == today
+    today = now
+    if wasOnToday || selectedDate > now { selectedDate = now }
   }
 
   /// Follows auth changes for the life of the app.
@@ -120,6 +160,9 @@ final class AppModel {
   /// Removes cached data of the previous user.
   private func clearLocalData() async {
     await cache.clear()
+    await sync.clearAll()
+    dayStore.clear()
+    targetsStore.clear()
     SnapshotStore.clear()
     selectedDate = today
     selectedTab = .today

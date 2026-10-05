@@ -2,7 +2,7 @@
 
 ## Status
 
-Phase 6 — Shell and Today. Next step: TabView with the log accessory, DayStore (cache-first, pending outbox rows), Today screen, entry detail, swipe delete with undo, target sheet, day boundary handling.
+Phase 7 — Logger. Next step: LoggerModel (composer, items, streaming estimate, drafts), camera/photos/scan pickers, image processing and upload, review list, label overrides, save to library, offline queue, and the library picker.
 
 ## Done
 
@@ -17,6 +17,8 @@ Phase 6 — Shell and Today. Next step: TabView with the log accessory, DayStore
 - Phase 4 — data and sync. Verified: lint clean; `xcodebuild … build test` ran 59 tests in 11 suites (7 new `OutboxTests`), all passed; a scratch Swift executable using the live clients against local Supabase signed up a user, saved a target, added a food, logged an entry twice (one entry kept), fetched the day (totals 260 kcal, goals 2100), found the duplicate food, saved a meal, deleted the entry, and deleted the account.
 
 - Phase 5 — auth and onboarding. Verified: lint clean; `xcodebuild … build test` 59/59 passed; a scratch XCUITest against local Supabase signed up by email, saw onboarding (target prefilled 2100/140/220/70, "Macros add up to 2070 kcal"), allowed AI, reached the signed-in shell, relaunched into the signed-in shell with no auth screen, signed out to Auth, and signed back in without onboarding. Screenshots of Auth checked in light and dark mode.
+
+- Phase 6 — shell and Today. Verified: lint clean; `xcodebuild … build test` 59/59 passed; scratch XCUITest `TodayTests` against local Supabase with a seeded user passed: Today shows the seeded meals, swipe right goes to yesterday and back, swipe forward stops at today, the calendar popover opens, choosing "Cut" asks for confirmation and updates the target row, swipe delete hides the row with an "Undo" toast, Undo restores it, a second delete reaches the server after 5 s, pull to refresh shows a server-side entry, and a relaunch against an unreachable server shows cached Today with the "Try again" banner. Screenshots checked in light and dark mode.
 
 ## Decisions
 
@@ -59,14 +61,20 @@ Phase 6 — Shell and Today. Next step: TabView with the log accessory, DayStore
 - The Auth screen uses white title text and a black Sign in with Apple button in both modes, because the brand gradient is bright in both.
 - `NSAllowsLocalNetworking` is on so the Simulator can reach local Supabase over http.
 - Sign-out clears the file cache and the widget snapshot. Drafts and the outbox are handled in Settings (Phase 10).
+- Logging always goes through the outbox (enqueue, then run at once). Success refetches the day; any failure leaves the pending row. This gives one code path for online and offline logging.
+- Pending deletes are outbox items, so a deleted row stays hidden across relaunches until the delete syncs. Undo removes the item. Deleting a still-pending entry drops its `logEntry` item, and Undo queues it again.
+- The day swipe gesture is on the target row, the summary card, and the empty state, not on entry rows, because entry rows use the trailing swipe for Delete.
+- When a day was never loaded and the device is offline, a pending entry still shows with the goals of the latest cached earlier day.
+- `DateKey` is `Identifiable` in EZHAKit (used for `.sheet(item:)`), because the lint forbids retroactive conformances.
+- Entry detail "Log again" keeps the source entry's `input_type`, `ai_source`, text, and photo path; only ids, date, and time are new.
 
 ## Handoff
 
 1. Supabase dashboard › Authentication › URL Configuration › Redirect URLs: add `ezha://login-callback` and `ezha://reset-password`. Without them, Google sign-in and the password reset link fall back to the Site URL and do not open the app.
 2. Supabase dashboard › Authentication › Sign In / Providers › Apple: turn it on and put `com.aliaksei.ezha` in "Client IDs". Native Sign in with Apple needs only the bundle ID; the Services ID and secret key are only for web OAuth.
 3. Sign in with Apple needs a paid Apple Developer Program membership. The free Personal Team cannot sign the capability (see the Phase 12 device notes).
-5. On the iPhone, after steps 1–3: sign in with Apple and with Google, and confirm both land on Today (or onboarding for a new account).
 4. Google is already on for the PWA. No change needed beyond the redirect URL in step 1. The Google Cloud OAuth client must keep `https://eixwgqtyeaehczasvjup.supabase.co/auth/v1/callback` as an authorized redirect URI.
+5. On the iPhone, after steps 1–3: sign in with Apple and with Google, and confirm both land on Today (or onboarding for a new account).
 
 ## Follow-ups
 
