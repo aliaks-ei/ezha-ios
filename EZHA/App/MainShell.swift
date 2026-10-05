@@ -5,7 +5,6 @@ import SwiftUI
 struct MainShell: View {
   @Environment(AppModel.self) private var appModel
   @Environment(\.scenePhase) private var scenePhase
-  @Namespace private var loggerTransition
   @State private var loggerDate: DateKey?
 
   var body: some View {
@@ -27,12 +26,12 @@ struct MainShell: View {
     .tabBarMinimizeBehavior(.onScrollDown)
     .tabViewBottomAccessory {
       LogAccessory(openLogger: { openLogger() })
-        .matchedTransitionSource(id: "logger", in: loggerTransition)
     }
     .overlay { ToastOverlay(toast: $appModel.toast).padding(.bottom, 110) }
     .sheet(item: $loggerDate) { date in
+      // No zoom transition: dismissing a zoom sheet whose source is in the tab bar
+      // accessory hits a UIKit assertion (_morphPreviewFromCurrentState) on iOS 26.4.
       LoggerView(date: date)
-        .navigationTransition(.zoom(sourceID: "logger", in: loggerTransition))
     }
     .task {
       await appModel.sync.refresh()

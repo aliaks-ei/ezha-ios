@@ -2,7 +2,7 @@
 
 ## Status
 
-Phase 7 — Logger. Next step: LoggerModel (composer, items, streaming estimate, drafts), camera/photos/scan pickers, image processing and upload, review list, label overrides, save to library, offline queue, and the library picker.
+Phase 8 — Library. Next step: Library tab list (search, filters, favorites, swipe actions, context menu), quick log sheet, food editor, meal editor, add food (photo/manual) with the duplicate dialog.
 
 ## Done
 
@@ -19,6 +19,8 @@ Phase 7 — Logger. Next step: LoggerModel (composer, items, streaming estimate,
 - Phase 5 — auth and onboarding. Verified: lint clean; `xcodebuild … build test` 59/59 passed; a scratch XCUITest against local Supabase signed up by email, saw onboarding (target prefilled 2100/140/220/70, "Macros add up to 2070 kcal"), allowed AI, reached the signed-in shell, relaunched into the signed-in shell with no auth screen, signed out to Auth, and signed back in without onboarding. Screenshots of Auth checked in light and dark mode.
 
 - Phase 6 — shell and Today. Verified: lint clean; `xcodebuild … build test` 59/59 passed; scratch XCUITest `TodayTests` against local Supabase with a seeded user passed: Today shows the seeded meals, swipe right goes to yesterday and back, swipe forward stops at today, the calendar popover opens, choosing "Cut" asks for confirmation and updates the target row, swipe delete hides the row with an "Undo" toast, Undo restores it, a second delete reaches the server after 5 s, pull to refresh shows a server-side entry, and a relaunch against an unreachable server shows cached Today with the "Try again" banner. Screenshots checked in light and dark mode.
+
+- Phase 7 — logger. Verified: lint clean; `xcodebuild … build test` 61/61 passed (new `ImageProcessingTests`: 3000×2000 becomes 1400×933 and GPS is removed); scratch XCUITest `LoggerTests` against local Supabase with a mock OpenAI server passed: text estimate with the consent sheet, the stale-input note and "Estimate nutrition" after editing the text, re-estimate and log; library-only log; photo-only log (Photos picker); photo + text as a nutrition label with 50 g eaten (442 kcal/100 g became 221 kcal); text + library. The server rows were `text/text`, `text/library`, `photo/food_photo` with an image path, `photo+text/label_photo` with an image path, and a `text/text` entry that includes the Oats library item. A draft with text and a photo survived an app kill.
 
 ## Decisions
 
@@ -67,6 +69,13 @@ Phase 7 — Logger. Next step: LoggerModel (composer, items, streaming estimate,
 - When a day was never loaded and the device is offline, a pending entry still shows with the goals of the latest cached earlier day.
 - `DateKey` is `Identifiable` in EZHAKit (used for `.sheet(item:)`), because the lint forbids retroactive conformances.
 - Entry detail "Log again" keeps the source entry's `input_type`, `ai_source`, text, and photo path; only ids, date, and time are new.
+- No zoom transition for the logger sheet. Dismissing a `.navigationTransition(.zoom)` sheet whose `matchedTransitionSource` is in `tabViewBottomAccessory` crashes with a UIKit assertion in `-[UIView _morphPreviewFromCurrentState:…]` on iOS 26.4. The sheet uses the standard animation.
+- The Simulator on iOS 26.4 reports a camera (`UIImagePickerController.isSourceTypeAvailable(.camera)` and `VNDocumentCameraViewController.isSupported` are true), so Camera and Scan label show there. The code still hides them when the API says no camera.
+- Local AI tests use a scratch mock of the OpenAI Responses API (`OPENAI_BASE_URL=http://host.lima.internal:8787/v1` in a scratch env file for `supabase functions serve`). The real model runs only on the remote project.
+- The logger sends `text`, `imagePath`, and `inputType` to `ai-estimate`; it does not send the library items as `items`. Library items stay as they are, and a new estimate replaces only AI items (5.4).
+- A new photo gets a new entry id, so the storage path `<user_id>/<entry_id>.jpg` stays unique with `upsert: false`. An "already exists" upload error reuses that path.
+- Label overrides edit the first AI item when the latest estimate came from a label.
+- Attachment buttons are an icon over a short label in one row, falling back to a horizontal scroll at large text sizes.
 
 ## Handoff
 

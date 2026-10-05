@@ -53,6 +53,7 @@ final class AppModel {
   let sync: SyncEngine
   let dayStore: DayStore
   let targetsStore: TargetsStore
+  let libraryStore: LibraryStore
 
   init(clients: AppClients, inMemory: Bool = false) {
     self.clients = clients
@@ -68,6 +69,7 @@ final class AppModel {
     sync = SyncEngine(container: container, clients: clients)
     dayStore = DayStore(clients: clients, cache: cache, sync: sync)
     targetsStore = TargetsStore(clients: clients, cache: cache)
+    libraryStore = LibraryStore(clients: clients, cache: cache)
     dayStore.today = { [weak self] in self?.today ?? .today() }
     targetsStore.today = dayStore.today
     targetsStore.onChange = { [weak self] in
@@ -163,6 +165,7 @@ final class AppModel {
     await sync.clearAll()
     dayStore.clear()
     targetsStore.clear()
+    libraryStore.clear()
     SnapshotStore.clear()
     selectedDate = today
     selectedTab = .today
