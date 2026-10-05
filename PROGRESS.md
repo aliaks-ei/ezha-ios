@@ -2,7 +2,7 @@
 
 ## Status
 
-Phase 9 — Suggestions. Next step: Suggestions tab (remaining macros header, form, Get suggestions, More menu, cards with warning and \"Log this\"), clear on day change.
+Phase 10 — Settings, privacy, account. Next step: Settings form (targets, appearance, AI consent, Sync section, account with sign out and delete account, about), then verify account deletion on local Supabase.
 
 ## Done
 
@@ -23,6 +23,8 @@ Phase 9 — Suggestions. Next step: Suggestions tab (remaining macros header, fo
 - Phase 7 — logger. Verified: lint clean; `xcodebuild … build test` 61/61 passed (new `ImageProcessingTests`: 3000×2000 becomes 1400×933 and GPS is removed); scratch XCUITest `LoggerTests` against local Supabase with a mock OpenAI server passed: text estimate with the consent sheet, the stale-input note and "Estimate nutrition" after editing the text, re-estimate and log; library-only log; photo-only log (Photos picker); photo + text as a nutrition label with 50 g eaten (442 kcal/100 g became 221 kcal); text + library. The server rows were `text/text`, `text/library`, `photo/food_photo` with an image path, `photo+text/label_photo` with an image path, and a `text/text` entry that includes the Oats library item. A draft with text and a photo survived an app kill.
 
 - Phase 8 — library. Verified: lint clean; `xcodebuild … build test` 61/61 passed; scratch XCUITest `LibraryTests` against local Supabase passed: a per-serving food (150 g cup) opens quick log at 150 g / 90 kcal and logs; a saved meal opens at 1 portion / 328 kcal, + makes 1.5 portions / 492 kcal and logs (server rows "Greek yogurt cup" 90 and "Overnight oats" 492); adding "oats" asks about the existing "Oats", Update existing keeps one food with the new 400 kcal; adding "OATS" with Create new makes a second; leading swipe favorites and the Favorites filter shows only it; the context menu Edit renames a meal; Add food › Photo estimates and saves "Chicken and rice". Screenshots checked in light and dark mode.
+
+- Phase 9 — suggestions. Verified: lint clean; `xcodebuild … build test` 61/61 passed; scratch XCUITest `SuggestionsTests` against local Supabase and the mock passed: with 460/20/50/20 remaining, the cards show "Exceeds calories by 190 kcal, protein by 25 g, carbs by 10 g, fat by 2 g" and "Exceeds protein by 12 g" with the hint; More › Other options regenerates; "Log this" opens the logger with "Turkey wrap: Whole wheat wrap with turkey and salad." and the primary button still says Estimate; switching to yesterday clears the results. Screenshots checked in light and dark mode.
 
 ## Decisions
 
@@ -82,6 +84,8 @@ Phase 9 — Suggestions. Next step: Suggestions tab (remaining macros header, fo
 - Add food › Photo uploads the photo under a random UUID name (`<user_id>/<uuid>.jpg`), because there is no entry. A non-label photo saves its display macros as per 100 g, like the PWA's `buildPhotoLibraryDraft`.
 - The meal editor edits ingredients as logger items (per 100 g), so changing grams scales the macros. New ingredients come from saved foods at their default grams.
 - Library deletes use a confirmation dialog and have no undo (guide 8.6).
+- "Log this" fills the logger text only when the day's draft has no text, so an existing draft is not overwritten.
+- Warnings compare against the remaining macros at the time of the request, like the PWA.
 
 ## Handoff
 

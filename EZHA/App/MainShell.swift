@@ -14,7 +14,7 @@ struct MainShell: View {
         TodayView(openLogger: openLogger)
       }
       Tab("Suggestions", systemImage: "sparkles", value: AppModel.Tab.suggestions) {
-        SuggestionsPlaceholder()
+        SuggestionsView()
       }
       Tab("Library", systemImage: "books.vertical", value: AppModel.Tab.library) {
         LibraryView()
