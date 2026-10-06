@@ -76,6 +76,8 @@ targets:
     platform: iOS
     sources:
       - path: EZHAWidgets
+      - path: EZHA/Intents/OpenLoggerIntent.swift
+        type: file
     dependencies:
       - package: EZHAKit
       - sdk: WidgetKit.framework

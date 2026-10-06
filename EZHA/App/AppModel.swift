@@ -77,6 +77,7 @@ final class AppModel {
       dayStore.invalidate()
       await dayStore.load(selectedDate, force: true)
     }
+    OpenLoggerIntent.handler = { [weak self] in self?.openLoggerForToday() }
     sync.onSynced = { [weak self] dates in
       for date in dates { await self?.dayStore.load(date, force: true) }
     }
@@ -85,6 +86,14 @@ final class AppModel {
   func showToast(_ text: String, actionTitle: String? = nil, action: (@MainActor () -> Void)? = nil)
   {
     toast = ToastMessage(text: text, actionTitle: actionTitle, action: action)
+  }
+
+  /// Opens the logger for today (widget, control, Siri).
+  func openLoggerForToday() {
+    refreshToday()
+    selectedTab = .today
+    selectedDate = today
+    isLoggerRequested = true
   }
 
   /// Moves to the new day when midnight passes while the user is on today.
@@ -147,8 +156,7 @@ final class AppModel {
       selectedTab = .today
       selectedDate = today
     case .log:
-      selectedTab = .today
-      isLoggerRequested = true
+      openLoggerForToday()
     case .suggestions: selectedTab = .suggestions
     case .library: selectedTab = .library
     case .settings: selectedTab = .settings

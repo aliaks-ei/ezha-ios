@@ -2,7 +2,7 @@
 
 ## Status
 
-Phase 11 — Widgets and intents. Next step: widget families from WidgetSnapshot, Control Center control, App Intents (OpenLoggerIntent, CaloriesLeftIntent), AppShortcutsProvider, then previews and the ezha://log check.
+Phase 12 — Polish and release readiness. Next step: motion and Reduce Motion pass, accessibility pass (VoiceOver labels, largest text, contrast), performance smoke test (30 entries, cold launch from cache), privacy manifest, end-to-end run against the remote backend, then device install.
 
 ## Done
 
@@ -27,6 +27,8 @@ Phase 11 — Widgets and intents. Next step: widget families from WidgetSnapshot
 - Phase 9 — suggestions. Verified: lint clean; `xcodebuild … build test` 61/61 passed; scratch XCUITest `SuggestionsTests` against local Supabase and the mock passed: with 460/20/50/20 remaining, the cards show "Exceeds calories by 190 kcal, protein by 25 g, carbs by 10 g, fat by 2 g" and "Exceeds protein by 12 g" with the hint; More › Other options regenerates; "Log this" opens the logger with "Turkey wrap: Whole wheat wrap with turkey and salad." and the primary button still says Estimate; switching to yesterday clears the results. Screenshots checked in light and dark mode.
 
 - Phase 10 — settings, privacy, account. Verified: lint clean; `xcodebuild … build test` 61/61 passed; scratch XCUITest `SettingsTests` against local Supabase passed: add and swipe-delete a target, appearance switch, then a relaunch against an unreachable server logged a library meal offline ("Saved on this device…" toast, a "Waiting to sync" row, the "Includes 1 meal waiting to sync" footnote, and a Settings › Sync row), and a relaunch online synced it (badge gone, server row present). Delete account with the two-step confirmation returned to Auth; the same email could no longer sign in; `psql` showed 0 storage objects under the user's folder and 0 auth, entry, and food rows.
+
+- Phase 11 — widgets and intents. Verified: lint clean; `xcodebuild … build test` 61/61 passed (app and widget extension build); a scratch unit-test target compiled `EZHAWidgets/CaloriesWidget.swift` and rendered all five families (small, medium, circular, rectangular, inline) in light and dark mode, under and over goal, with `ImageRenderer`; scratch XCUITest `WidgetLinkTests` passed: a quick log wrote `widget-snapshot.json` in the App Group container (totals 1,020 kcal = 640 seeded + 380 logged), `ezha://log` opened the logger from the Library tab, and `ezha://today` returned to today.
 
 ## Decisions
 
@@ -92,6 +94,10 @@ Phase 11 — Widgets and intents. Next step: widget families from WidgetSnapshot
 - Sign out with pending outbox items asks first ("N changes waiting to sync will be lost"), then clears the outbox, drafts, caches, and the widget snapshot.
 - Delete account uses a confirmation dialog, then an alert ("This cannot be undone."), as the two steps.
 - The Sync section shows each item's last error, or "Waiting to sync", or the next retry time and attempt count.
+- `OpenLoggerIntent` has `supportedModes = .foreground` and is compiled into the app and the widget extension (the control needs the type). In the app it calls a handler the app installs; anywhere else it sets an App Group flag that the app reads when it becomes active. I did not use `OpenURLIntent` because I could not confirm it opens a custom URL scheme.
+- The widget view is split into `CaloriesWidgetView` (reads `widgetFamily`) and `CaloriesWidgetContent(entry:family:)`, because `widgetFamily` is read-only and the families were checked by rendering the content view offscreen.
+- The stretch `LogSavedFoodIntent` is done: `SavedFoodEntity` with an `EntityStringQuery` over the cached library. It logs the default quantity (food default grams, or 1 portion of a meal whose ingredients are cached), falls back to the outbox when offline, and adds the macros to the widget snapshot.
+- Siri phrases for "Calories left": "Calories left in EZHA", "How many calories are left in EZHA".
 
 ## Handoff
 

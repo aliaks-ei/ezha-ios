@@ -41,6 +41,7 @@ struct MainShell: View {
     .onChange(of: scenePhase) { _, phase in
       guard phase == .active else { return }
       appModel.refreshToday()
+      if OpenLoggerIntent.consumePendingRequest() { appModel.openLoggerForToday() }
       Task { await appModel.sync.run() }
     }
     .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in
