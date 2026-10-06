@@ -32,6 +32,7 @@ private struct LoggerContent: View {
   @Environment(\.dismiss) private var dismiss
   @Environment(\.scenePhase) private var scenePhase
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @Environment(\.dynamicTypeSize) private var dynamicTypeSize
   @State private var photoItem: PhotosPickerItem?
   @State private var isPhotosPresented = false
   @State private var isCameraPresented = false
@@ -41,7 +42,6 @@ private struct LoggerContent: View {
   @State private var isClearConfirmPresented = false
   @State private var isDraftAlertPresented = false
   @State private var labelFields = MacroFieldsModel()
-  @State private var logged = 0
   @FocusState private var isTextFocused: Bool
 
   var body: some View {
@@ -130,7 +130,6 @@ private struct LoggerContent: View {
     .onChange(of: scenePhase) { _, phase in
       if phase == .background { Task { await model.saveDraftNow() } }
     }
-    .sensoryFeedback(.success, trigger: logged)
     .sensoryFeedback(.success, trigger: model.estimateCount)
   }
 
@@ -138,17 +137,21 @@ private struct LoggerContent: View {
 
   private var composer: some View {
     VStack(alignment: .leading, spacing: 12) {
-      HStack(spacing: 4) {
-        Text("What did you eat?").font(.headline)
+      Group {
         if model.imageData != nil {
-          Text("(optional)").font(.subheadline).foregroundStyle(.secondary)
+          Text(
+            "\(Text("What did you eat?").font(.headline)) \(Text("(optional)").font(.subheadline).foregroundStyle(.secondary))"
+          )
+        } else {
+          Text("What did you eat?").font(.headline)
         }
       }
+      .fixedSize(horizontal: false, vertical: true)
       TextField(
         "What did you eat?", text: $model.state.text,
         prompt: Text("e.g. 150g chicken, rice and a little olive oil"), axis: .vertical
       )
-      .lineLimit(2...6)
+      .lineLimit(dynamicTypeSize.isAccessibilitySize ? 4...10 : 2...6)
       .focused($isTextFocused)
       .disabled(model.isEstimating)
       .accessibilityIdentifier("mealText")
@@ -224,7 +227,7 @@ private struct LoggerContent: View {
     Button(action: action) {
       VStack(spacing: 4) {
         Image(systemName: systemImage).font(.title3)
-        Text(title).font(.caption.weight(.medium)).lineLimit(1).minimumScaleFactor(0.75)
+        Text(title).font(.caption.weight(.medium)).lineLimit(2).multilineTextAlignment(.center)
       }
       .frame(maxWidth: compact ? .infinity : nil, minHeight: 44)
       .padding(.horizontal, compact ? 0 : 8)
@@ -369,7 +372,6 @@ private struct LoggerContent: View {
     }
     Task {
       if await model.log() {
-        logged += 1
         dismiss()
       }
     }
@@ -417,11 +419,16 @@ private struct ItemCard: View {
         Text(item.name).font(.body.weight(.medium))
         Spacer()
         KcalText(value: macros.calories).font(.subheadline.weight(.semibold))
-        Button("Remove \(item.name)", systemImage: "xmark") { model.removeItem(item.id) }
-          .labelStyle(.iconOnly)
-          .buttonStyle(.borderless)
-          .foregroundStyle(.secondary)
-          .frame(width: 44, height: 44)
+        Button {
+          model.removeItem(item.id)
+        } label: {
+          Image(systemName: "xmark")
+            .frame(width: 44, height: 44)
+            .contentShape(.rect)
+        }
+        .buttonStyle(.borderless)
+        .foregroundStyle(.secondary)
+        .accessibilityLabel("Remove \(item.name)")
       }
       HStack {
         MacroLine(macros: macros)

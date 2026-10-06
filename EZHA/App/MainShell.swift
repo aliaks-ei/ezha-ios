@@ -24,6 +24,7 @@ struct MainShell: View {
       }
     }
     .tabBarMinimizeBehavior(.onScrollDown)
+    .sensoryFeedback(.success, trigger: appModel.logSuccessCount)
     .tabViewBottomAccessory {
       LogAccessory(openLogger: { openLogger() })
     }

@@ -2,7 +2,7 @@
 
 ## Status
 
-Phase 12 — Polish and release readiness. Next step: motion and Reduce Motion pass, accessibility pass (VoiceOver labels, largest text, contrast), performance smoke test (30 entries, cold launch from cache), privacy manifest, end-to-end run against the remote backend, then device install.
+All phases (0–12) are built and verified in the Simulator, locally and against the remote project. Remaining: install on the iPhone when it is connected (it was offline), and the handoff items below.
 
 ## Done
 
@@ -29,6 +29,8 @@ Phase 12 — Polish and release readiness. Next step: motion and Reduce Motion p
 - Phase 10 — settings, privacy, account. Verified: lint clean; `xcodebuild … build test` 61/61 passed; scratch XCUITest `SettingsTests` against local Supabase passed: add and swipe-delete a target, appearance switch, then a relaunch against an unreachable server logged a library meal offline ("Saved on this device…" toast, a "Waiting to sync" row, the "Includes 1 meal waiting to sync" footnote, and a Settings › Sync row), and a relaunch online synced it (badge gone, server row present). Delete account with the two-step confirmation returned to Auth; the same email could no longer sign in; `psql` showed 0 storage objects under the user's folder and 0 auth, entry, and food rows.
 
 - Phase 11 — widgets and intents. Verified: lint clean; `xcodebuild … build test` 61/61 passed (app and widget extension build); a scratch unit-test target compiled `EZHAWidgets/CaloriesWidget.swift` and rendered all five families (small, medium, circular, rectangular, inline) in light and dark mode, under and over goal, with `ImageRenderer`; scratch XCUITest `WidgetLinkTests` passed: a quick log wrote `widget-snapshot.json` in the App Group container (totals 1,020 kcal = 640 seeded + 380 logged), `ezha://log` opened the logger from the Library tab, and `ezha://today` returned to today.
+
+- Phase 12 — polish and release readiness. Verified: lint clean; `xcodebuild … build test` 61/61 passed; privacy manifests are in `EZHA.app` and `EZHAWidgets.appex` (`plutil -lint` OK); accessibility audit (`performAccessibilityAudit`) run on 12 screens, real findings fixed (44 pt hit areas for remove, Refresh, and stepper buttons; no shrinking text in attachment labels and stat tiles; primary-button contrast); largest accessibility text size checked by screenshots on Today, Logger, Library, Quick log, Suggestions, Settings (ring above bars, no clipped labels); Increase Contrast, Reduce Transparency, and Reduce Motion screens checked; Today with 30 entries scrolls and a cold launch shows cached Today within 2 s with no placeholders; end-to-end against the remote project with the test user and the real model passed (text estimate 235 kcal with 2 items, photo + text estimate with an image path, library quick log, target changed to "E2E Cut", delete then Undo kept the entry, 3 suggestions); all scratch UI suites rerun and passed. Device: iPhone offline; the default device build fails on signing (Sign in with Apple, see Handoff); the same build with the widget's entitlements file (App Group only) signs with the Personal Team.
 
 ## Decisions
 
@@ -98,17 +100,49 @@ Phase 12 — Polish and release readiness. Next step: motion and Reduce Motion p
 - The widget view is split into `CaloriesWidgetView` (reads `widgetFamily`) and `CaloriesWidgetContent(entry:family:)`, because `widgetFamily` is read-only and the families were checked by rendering the content view offscreen.
 - The stretch `LogSavedFoodIntent` is done: `SavedFoodEntity` with an `EntityStringQuery` over the cached library. It logs the default quantity (food default grams, or 1 portion of a meal whose ingredients are cached), falls back to the outbox when offline, and adds the macros to the widget snapshot.
 - Siri phrases for "Calories left": "Calories left in EZHA", "How many calories are left in EZHA".
+- Light `BrandPrimary` (and `AccentColor`) changed from `#D92B91` to `#D12786`. White text on `#D92B91` is 4.47:1, just under WCAG AA 4.5:1 for button text; `#D12786` is 4.8:1. Dark stays `#FF3DAB`.
+- The "meal logged" success haptic fires from the shell (`AppModel.logSuccessCount`), because the logger sheet is already closing.
+- Remaining accessibility audit findings are not fixed on purpose: elements under the tab bar, the bottom accessory, or a sheet in mid-animation (audit artifacts), and system `.secondary` text (Apple's secondary label color; it gets darker with Increase Contrast).
+- At accessibility text sizes: macro bar headers stack, the Suggestions header and prep row stack, the logger text field allows 4–10 lines, quick log opens at the large detent, grams fields size to their content.
+- Scroll smoothness in the Simulator: `XCTOSSignpostMetric.scrollingAndDecelerationMetric` reports only duration there (2.56 s for 4 fast swipes), no hitch rate. Hitch rate needs Instruments on a device (Handoff).
 
 ## Handoff
 
-1. Supabase dashboard › Authentication › URL Configuration › Redirect URLs: add `ezha://login-callback` and `ezha://reset-password`. Without them, Google sign-in and the password reset link fall back to the Site URL and do not open the app.
-2. Supabase dashboard › Authentication › Sign In / Providers › Apple: turn it on and put `com.aliaksei.ezha` in "Client IDs". Native Sign in with Apple needs only the bundle ID; the Services ID and secret key are only for web OAuth.
-3. Sign in with Apple needs a paid Apple Developer Program membership. The free Personal Team cannot sign the capability (see the Phase 12 device notes).
-4. Google is already on for the PWA. No change needed beyond the redirect URL in step 1. The Google Cloud OAuth client must keep `https://eixwgqtyeaehczasvjup.supabase.co/auth/v1/callback` as an authorized redirect URI.
+Supabase dashboard:
+
+1. Authentication › URL Configuration › Redirect URLs: add `ezha://login-callback` and `ezha://reset-password`. Without them, Google sign-in and the password reset link fall back to the Site URL and do not open the app.
+2. Authentication › Sign In / Providers › Apple: turn it on and put `com.aliaksei.ezha` in "Client IDs". Native Sign in with Apple needs only the bundle ID; the Services ID and secret key are only for web OAuth.
+3. Google is already on for the PWA. The Google Cloud OAuth client must keep `https://eixwgqtyeaehczasvjup.supabase.co/auth/v1/callback` as an authorized redirect URI.
+
+Signing and device:
+
+4. The default device build fails with the free Personal Team. Exact error: `Cannot create a iOS App Development provisioning profile for "com.aliaksei.ezha". Personal development teams, including "Aliaksei Mazheika", do not support the Sign In with Apple capability.` Fix: join the Apple Developer Program, or for testing now, build without that one entitlement (Sign in with Apple then fails on the phone; email and Google work):
+   - `xcodebuild -scheme EZHA -destination 'platform=iOS,id=00008140-000C74813401801C' -allowProvisioningUpdates -derivedDataPath /tmp/ezha-device CODE_SIGN_ENTITLEMENTS=EZHAWidgets/EZHAWidgets.entitlements build`
+   - `xcrun devicectl device install app --device AC029A77-89AC-50A4-9B9A-7BF7CD8E8941 /tmp/ezha-device/Build/Products/Debug-iphoneos/EZHA.app`
+   - `xcrun devicectl device process launch --device AC029A77-89AC-50A4-9B9A-7BF7CD8E8941 com.aliaksei.ezha`
+   - First launch: Settings › General › VPN & Device Management › trust the developer app.
+5. Final icon art: build a layered icon in Icon Composer. The app ships a placeholder (PWA logo on the brand gradient).
 6. Set `PRIVACY_POLICY_URL` in `Config/Shared.xcconfig` once a privacy policy is published (App Store requirement). Write `https:/$()/` for `https://`.
-5. On the iPhone, after steps 1–3: sign in with Apple and with Google, and confirm both land on Today (or onboarding for a new account).
+7. Before release, read the current App Store Review Guideline 5.1.2 text on sharing data with third-party AI, and compare it with the consent text.
+
+Checks to tap through on the iPhone:
+
+8. Sign in with Google (after step 1) and with Apple (after steps 2 and 4 with a paid team). Request a password reset and open the email link: the "Set new password" sheet should open.
+9. Camera and Scan label in the logger, with a real meal and a real nutrition label; set "Grams eaten" and log.
+10. Add the Calories widget to the Home Screen (small and medium) and the Lock Screen (circular, rectangular, inline). Check tinted and clear Home Screen modes. Tap it (opens Today) and the medium "Log" button (opens the logger).
+11. Add the "Log meal" control in Control Center and run it.
+12. Siri: "Log a meal in EZHA", "Calories left in EZHA". Shortcuts: "Log saved food".
+13. VoiceOver on Today, Logger, and Library. The ring reads as one element.
+14. Airplane mode: log a library meal, see "Waiting to sync", turn it off, and the badge clears.
+15. Kill the app while a draft with a photo is open, reopen the logger: the draft is back.
+16. Leave the app open on Today over midnight: it moves to the new day.
+17. Instruments (Animation Hitches) while scrolling Today with many entries.
 
 ## Follow-ups
 
 - `ai-estimate` checks the JWT only when the `VERIFY_JWT` secret is `true`, and platform `verify_jwt` is off. The remote has no `VERIFY_JWT` secret (checked with `supabase secrets list`), so text estimates work without sign-in. Fix: `supabase secrets set VERIFY_JWT=true`. Not done, because the guide does not ask for it.
 - The deployed `ai-suggestions` source was not in any repo (downloaded from the project). It is now in `supabase/functions/ai-suggestions/`.
+- Deleting an entry does not delete its photo from storage (guide section 13). Add a storage cleanup later.
+- The PWA was not run against the new backend. Its own summary sync still upserts after the new trigger, which should be harmless, but a quick PWA smoke test before retiring it is worth doing.
+- The remote test user `ezha-ios-test@example.com` now has test entries, an "E2E Oats" food, and an "E2E Cut" target from the end-to-end run.
+- Local tooling left running: Colima and the local Supabase stack (`supabase stop`, `colima stop` to free resources).

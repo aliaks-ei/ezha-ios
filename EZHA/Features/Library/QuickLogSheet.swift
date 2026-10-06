@@ -6,12 +6,12 @@ struct QuickLogSheet: View {
   var food: SavedFood
   @Environment(AppModel.self) private var appModel
   @Environment(\.dismiss) private var dismiss
+  @Environment(\.dynamicTypeSize) private var dynamicTypeSize
   @State private var baseItems: [LogItem] = []
   @State private var quantityText: String
   @State private var isLoading = false
   @State private var isSaving = false
   @State private var errorMessage: String?
-  @State private var logged = 0
 
   init(food: SavedFood) {
     self.food = food
@@ -113,9 +113,8 @@ struct QuickLogSheet: View {
         .accessibilityIdentifier("quickLogButton")
       }
       .task { await loadItems() }
-      .sensoryFeedback(.success, trigger: logged)
     }
-    .presentationDetents([.medium, .large])
+    .presentationDetents(dynamicTypeSize.isAccessibilitySize ? [.large] : [.medium, .large])
   }
 
   private func loadItems() async {
@@ -146,7 +145,6 @@ struct QuickLogSheet: View {
     do {
       let result = try await appModel.dayStore.log(payload)
       appModel.libraryStore.markUsed(payload.usedFoodIds)
-      logged += 1
       appModel.showToast(
         result == .saved
           ? String(localized: "Meal logged.")

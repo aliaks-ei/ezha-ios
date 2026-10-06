@@ -26,6 +26,8 @@ final class DayStore {
   @ObservationIgnored private let cache: FileCache
   @ObservationIgnored private let sync: SyncEngine
   @ObservationIgnored var today: () -> DateKey = { .today() }
+  /// Called after each log is queued or saved.
+  @ObservationIgnored var onLogged: (@MainActor () -> Void)?
 
   init(clients: AppClients, cache: FileCache, sync: SyncEngine) {
     self.clients = clients
@@ -89,6 +91,7 @@ final class DayStore {
   /// queued (network errors retry; other errors show in Settings › Sync).
   func log(_ payload: LogPayload) async throws -> LogResult {
     try await sync.enqueueLog(payload)
+    onLogged?()
     if sync.items.contains(where: { $0.entityId == payload.entry.id }) {
       updateSnapshot(payload.entry.date)
       return .queued

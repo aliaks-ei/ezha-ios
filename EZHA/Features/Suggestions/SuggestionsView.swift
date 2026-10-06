@@ -5,6 +5,7 @@ import SwiftUI
 struct SuggestionsView: View {
   @Environment(AppModel.self) private var appModel
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @Environment(\.dynamicTypeSize) private var dynamicTypeSize
   @State private var mealType = SuggestionRules.MealType.meal
   @State private var prepMinutes = SuggestionRules.defaultPrepMinutes
   @State private var notes = ""
@@ -69,29 +70,42 @@ struct SuggestionsView: View {
 
   private var header: some View {
     VStack(alignment: .leading, spacing: 8) {
-      HStack {
-        Text("Remaining").font(.headline)
-        Spacer()
+      let header = HStack {
         TimelineView(.periodic(from: .now, by: 30)) { _ in
           Text("as of \(refreshedAt, format: .relative(presentation: .named))")
             .font(.caption)
             .foregroundStyle(.secondary)
         }
-        Button("Refresh", systemImage: "arrow.clockwise") {
+        Button {
           Task {
             await appModel.dayStore.load(date, force: true)
             refreshedAt = .now
           }
+        } label: {
+          Image(systemName: "arrow.clockwise").frame(width: 44, height: 44).contentShape(.rect)
         }
-        .labelStyle(.iconOnly)
-        .frame(width: 44, height: 44)
+        .accessibilityLabel("Refresh")
+      }
+      if dynamicTypeSize.isAccessibilitySize {
+        Text("Remaining").font(.headline)
+        header
+      } else {
+        HStack {
+          Text("Remaining").font(.headline)
+          Spacer()
+          header
+        }
       }
       let values = remaining ?? .zero
-      HStack(spacing: 8) {
+      let tiles = Group {
         StatTile(title: "kcal", value: values.calories, color: .brandPrimary)
         StatTile(title: "Protein", value: values.protein, unit: "g", color: .brandSecondary)
         StatTile(title: "Carbs", value: values.carbs, unit: "g", color: .brandAccent)
         StatTile(title: "Fat", value: values.fat, unit: "g", color: .brandPrimary)
+      }
+      ViewThatFits(in: .horizontal) {
+        HStack(spacing: 8) { tiles }
+        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) { tiles }
       }
       .redacted(reason: remaining == nil ? .placeholder : [])
     }
@@ -107,16 +121,32 @@ struct SuggestionsView: View {
         }
       }
       .pickerStyle(.segmented)
-      Stepper(value: $prepMinutes, in: 5...240, step: 5) {
-        HStack {
-          Text("Max prep")
-          Spacer()
-          TextField("Minutes", value: $prepMinutes, format: .number)
-            .keyboardType(.numberPad)
-            .multilineTextAlignment(.trailing)
-            .frame(maxWidth: 56)
-            .monospacedDigit()
-          Text("min").foregroundStyle(.secondary)
+      let minutes = HStack(spacing: 4) {
+        TextField("Minutes", value: $prepMinutes, format: .number)
+          .keyboardType(.numberPad)
+          .multilineTextAlignment(.trailing)
+          .fixedSize()
+          .monospacedDigit()
+        Text("min").foregroundStyle(.secondary)
+      }
+      Group {
+        if dynamicTypeSize.isAccessibilitySize {
+          VStack(alignment: .leading, spacing: 8) {
+            Text("Max prep")
+            HStack {
+              minutes
+              Spacer()
+              Stepper("Max prep", value: $prepMinutes, in: 5...240, step: 5).labelsHidden()
+            }
+          }
+        } else {
+          Stepper(value: $prepMinutes, in: 5...240, step: 5) {
+            HStack {
+              Text("Max prep")
+              Spacer()
+              minutes
+            }
+          }
         }
       }
       .onChange(of: prepMinutes) { _, value in
@@ -265,8 +295,7 @@ private struct StatTile: View {
           .monospacedDigit()
           .foregroundStyle(value < 0 ? Color.danger : Color.primary)
           .contentTransition(.numericText(value: value))
-          .minimumScaleFactor(0.6)
-          .lineLimit(1)
+          .fixedSize()
         if let unit { Text(unit).font(.caption).foregroundStyle(.secondary) }
       }
       Text(title)

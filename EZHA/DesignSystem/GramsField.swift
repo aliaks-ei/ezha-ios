@@ -15,14 +15,14 @@ struct GramsField: View {
 
   var body: some View {
     HStack(spacing: 4) {
-      Button("Decrease", systemImage: "minus") {
+      Button {
         decrements += 1
         onStep(-step)
+      } label: {
+        Image(systemName: "minus").frame(width: 44, height: 44).contentShape(.rect)
       }
-      .labelStyle(.iconOnly)
       .buttonRepeatBehavior(.enabled)
-      .frame(width: 44, height: 44)
-      .contentShape(.rect)
+      .accessibilityLabel("Decrease")
 
       HStack(spacing: 2) {
         TextField("Grams", text: $text)
@@ -31,18 +31,19 @@ struct GramsField: View {
           .fontDesign(.rounded)
           .monospacedDigit()
           .focused($isFocused)
-          .frame(minWidth: 44, maxWidth: 80)
+          .fixedSize()
+          .frame(minWidth: 44, alignment: .trailing)
         Text(unit).foregroundStyle(.secondary)
       }
 
-      Button("Increase", systemImage: "plus") {
+      Button {
         increments += 1
         onStep(step)
+      } label: {
+        Image(systemName: "plus").frame(width: 44, height: 44).contentShape(.rect)
       }
-      .labelStyle(.iconOnly)
       .buttonRepeatBehavior(.enabled)
-      .frame(width: 44, height: 44)
-      .contentShape(.rect)
+      .accessibilityLabel("Increase")
     }
     .buttonStyle(.borderless)
     .sensoryFeedback(.increase, trigger: increments)

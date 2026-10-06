@@ -103,6 +103,7 @@ private struct DayContent: View {
   var openLogger: (DateKey?) -> Void
 
   @Environment(AppModel.self) private var appModel
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @State private var isTargetSheetPresented = false
   @State private var detail: DayEntry?
 
@@ -144,6 +145,10 @@ private struct DayContent: View {
       }
     }
     .scrollContentBackground(.hidden)
+    .animation(
+      reduceMotion ? .easeInOut(duration: 0.2) : .spring(duration: 0.45, bounce: 0.15),
+      value: bundle?.entries.map(\.id)
+    )
     .refreshable {
       await appModel.sync.run()
       await store.load(date, force: true)

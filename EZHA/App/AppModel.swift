@@ -47,6 +47,8 @@ final class AppModel {
   var isAIConsentGiven: Bool { aiConsent == .allowed }
 
   var toast: ToastMessage?
+  /// Incremented after each successful log, for the success haptic.
+  var logSuccessCount = 0
 
   let clients: AppClients
   let cache = FileCache()
@@ -72,6 +74,7 @@ final class AppModel {
     libraryStore = LibraryStore(clients: clients, cache: cache)
     dayStore.today = { [weak self] in self?.today ?? .today() }
     targetsStore.today = dayStore.today
+    dayStore.onLogged = { [weak self] in self?.logSuccessCount += 1 }
     targetsStore.onChange = { [weak self] in
       guard let self else { return }
       dayStore.invalidate()

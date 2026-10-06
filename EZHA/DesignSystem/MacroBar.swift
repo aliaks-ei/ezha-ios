@@ -13,20 +13,35 @@ struct MacroBar: View {
 
   private var remaining: Double { (goal - eaten).rounded() }
 
+  private var titleText: some View {
+    Text(title).font(.subheadline.weight(.semibold))
+  }
+
+  private var remainingText: some View {
+    let value = Text("\(abs(remaining), format: .number.precision(.fractionLength(0))) g")
+      .fontWeight(.semibold)
+      .foregroundStyle(remaining < 0 ? Color.danger : Color.primary)
+    let word = Text(remaining < 0 ? "over" : "left").foregroundStyle(.secondary)
+    return Text("\(value) \(word)")
+      .font(.subheadline)
+      .fontDesign(.rounded)
+      .monospacedDigit()
+      .contentTransition(.numericText(value: remaining))
+  }
+
   var body: some View {
     VStack(alignment: .leading, spacing: 6) {
-      HStack(alignment: .firstTextBaseline) {
-        Text(title).font(.subheadline.weight(.semibold))
-        Spacer()
-        Text("\(abs(remaining), format: .number.precision(.fractionLength(0))) g")
-          .font(.subheadline.weight(.semibold))
-          .fontDesign(.rounded)
-          .monospacedDigit()
-          .contentTransition(.numericText(value: remaining))
-          .foregroundStyle(remaining < 0 ? Color.danger : Color.primary)
-        Text(remaining < 0 ? "over" : "left")
-          .font(.subheadline)
-          .foregroundStyle(.secondary)
+      // Side by side when it fits; stacked at large text sizes.
+      ViewThatFits(in: .horizontal) {
+        HStack(alignment: .firstTextBaseline) {
+          titleText.fixedSize()
+          Spacer()
+          remainingText.fixedSize()
+        }
+        VStack(alignment: .leading, spacing: 2) {
+          titleText
+          remainingText
+        }
       }
       GeometryReader { proxy in
         let percent = Double(Macros.barPercent(eaten: eaten, target: goal)) / 100
