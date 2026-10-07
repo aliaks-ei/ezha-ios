@@ -5,7 +5,7 @@ import Foundation
 /// (the Control Center control runs it). The system runs `perform` in the app.
 struct OpenLoggerIntent: AppIntent {
   static let title: LocalizedStringResource = "Log a meal"
-  static let description = IntentDescription("Opens EZHA on the logger for today.")
+  static let description = IntentDescription("Opens Ezha on the logger for today.")
   static let supportedModes: IntentModes = .foreground
 
   /// Set by the app at launch. Nil in the widget extension.

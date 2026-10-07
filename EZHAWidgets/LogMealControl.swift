@@ -11,6 +11,6 @@ struct LogMealControl: ControlWidget {
       }
     }
     .displayName("Log meal")
-    .description("Opens EZHA on the logger.")
+    .description("Opens Ezha on the logger.")
   }
 }

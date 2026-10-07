@@ -17,7 +17,7 @@ struct AuthView: View {
       VStack(spacing: 24) {
         Spacer()
         VStack(spacing: 8) {
-          Text("EZHA")
+          Text("Ezha")
             .font(.system(.largeTitle, design: .rounded, weight: .bold))
           Text("Smarter meal logging with AI estimates you can edit.")
             .font(.body.weight(.medium))

@@ -60,7 +60,7 @@ struct LogSavedFoodIntent: AppIntent {
     if saved.isMeal {
       guard let ingredients: [SavedMealIngredient] = await cache.read("meal-\(saved.id.uuidString)")
       else {
-        throw AIError.message("Open this meal in EZHA once, then try again.")
+        throw AIError.message("Open this meal in Ezha once, then try again.")
       }
       items = LogItemMath.fromSavedMeal(ingredients)
     } else {

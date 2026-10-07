@@ -11,7 +11,7 @@ struct CaloriesLeftIntent: AppIntent {
   func perform() async throws -> some IntentResult & ProvidesDialog & ShowsSnippetView {
     guard let snapshot = SnapshotStore.read()?.asOf(.today()) else {
       return .result(
-        dialog: "Open EZHA once to load today's totals.",
+        dialog: "Open Ezha once to load today's totals.",
         view: Text("No data yet").padding())
     }
     let left = snapshot.remaining
