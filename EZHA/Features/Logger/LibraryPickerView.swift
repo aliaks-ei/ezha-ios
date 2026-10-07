@@ -66,7 +66,7 @@ struct LibraryPickerView: View {
           dismiss()
         } label: {
           Text(
-            "Add \(items.count) items · \(LogItemMath.totals(items).calories, format: .number.precision(.fractionLength(0))) kcal"
+            "Add ^[\(items.count) item](inflect: true) · \(LogItemMath.totals(items).calories, format: .number.precision(.fractionLength(0))) kcal"
           )
           .font(.headline)
           .monospacedDigit()

@@ -48,29 +48,36 @@ struct AIConsentView: View {
   }
 }
 
-/// The consent sheet shown before an AI action when consent is not given.
-struct AIConsentSheet: View {
+/// Asks for AI consent in an alert before an AI action. Runs the action on "Allow".
+/// An alert, not a sheet: these actions start from sheets, and sheets must not stack (HIG).
+private struct AIConsentAlert: ViewModifier {
+  @Binding var action: (() -> Void)?
   @Environment(AppModel.self) private var appModel
-  @Environment(\.dismiss) private var dismiss
-  var onAllowed: () -> Void = {}
 
-  var body: some View {
-    NavigationStack {
-      AIConsentView(
-        onAllow: {
-          appModel.aiConsent = .allowed
-          dismiss()
-          onAllowed()
-        },
-        onDecline: {
-          appModel.aiConsent = .declined
-          dismiss()
-        }
+  func body(content: Content) -> some View {
+    content.alert(
+      "Allow AI features?",
+      isPresented: Binding(get: { action != nil }, set: { if !$0 { action = nil } }),
+      presenting: action
+    ) { action in
+      Button("Not now", role: .cancel) { appModel.aiConsent = .declined }
+      Button("Allow") {
+        appModel.aiConsent = .allowed
+        action()
+      }
+      .keyboardShortcut(.defaultAction)
+    } message: { _ in
+      Text(
+        "Photos and descriptions you add are sent to our server and to OpenAI to estimate nutrition and suggest meals. Your library and manual logging work without AI. You can change this in Settings."
       )
-      .navigationTitle("AI features")
-      .navigationBarTitleDisplayMode(.inline)
     }
-    .presentationDetents([.medium, .large])
+  }
+}
+
+extension View {
+  /// Shows the AI consent alert while `action` is set.
+  func aiConsentAlert(_ action: Binding<(() -> Void)?>) -> some View {
+    modifier(AIConsentAlert(action: action))
   }
 }
 

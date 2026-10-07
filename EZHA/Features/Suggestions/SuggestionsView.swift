@@ -57,12 +57,7 @@ struct SuggestionsView: View {
         suggestions = []
         errorMessage = nil
       }
-      .sheet(
-        isPresented: Binding(get: { consentAction != nil }, set: { if !$0 { consentAction = nil } })
-      ) {
-        let action = consentAction
-        AIConsentSheet { action?() }
-      }
+      .aiConsentAlert($consentAction)
     }
   }
 

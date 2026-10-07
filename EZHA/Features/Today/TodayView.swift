@@ -19,25 +19,25 @@ struct TodayView: View {
           .id(date)
           .transition(reduceMotion ? .opacity : .push(from: direction))
       }
-      .background(alignment: .top) {
+      .background {
+        // One full-screen layer, so the bar area and the content share the same gradient.
         BrandBackground(intensity: 0.18)
           .mask(LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .center))
+          .background(Color.canvas)
+          .ignoresSafeArea()
       }
-      .background(Color.canvas)
       .navigationTitle(date.titleLabel(today: appModel.today))
+      // Large title in the same row as the buttons: saves the separate title row.
+      .toolbarTitleDisplayMode(.inlineLarge)
       .toolbar {
         if date != appModel.today {
-          ToolbarItem(placement: .topBarLeading) {
+          ToolbarItem(placement: .topBarTrailing) {
             Button("Today") { goTo(appModel.today) }
-              .buttonStyle(.glass)
           }
         }
         ToolbarItem(placement: .topBarTrailing) {
           Button("Choose day", systemImage: "calendar") { isCalendarPresented = true }
             .popover(isPresented: $isCalendarPresented) { calendar }
-        }
-        ToolbarItem(placement: .topBarTrailing) {
-          Button("Log meal", systemImage: "plus") { openLogger(date) }
         }
       }
       .task(id: date) { await appModel.dayStore.load(date) }
@@ -124,11 +124,9 @@ private struct DayContent: View {
 
       if let bundle {
         Section {
-          TargetRow(bundle: bundle, isToday: isToday) { isTargetSheetPresented = true }
-        }
-        .listRowBackground(Color.surface)
-        Section {
-          SummaryCard(goals: bundle.goals, totals: bundle.totals, isToday: isToday)
+          SummaryCard(goals: bundle.goals, totals: bundle.totals) {
+            TargetButton(bundle: bundle, isToday: isToday) { isTargetSheetPresented = true }
+          }
         }
         .listRowBackground(Color.surface)
         .gesture(swipe)
@@ -176,10 +174,14 @@ private struct DayContent: View {
     let pending = bundle.entries.filter(\.isPending).count
     Section {
       if bundle.entries.isEmpty {
-        ContentUnavailableView(
-          "Nothing logged yet", systemImage: "fork.knife",
-          description: Text("Tap Log meal to add your first meal.")
-        )
+        ContentUnavailableView {
+          Label("Nothing logged yet", systemImage: "fork.knife")
+        } description: {
+          Text("Log your first meal of the day.")
+        } actions: {
+          Button("Log meal") { openLogger(date) }
+            .buttonStyle(.borderedProminent)
+        }
         .listRowBackground(Color.clear)
         .gesture(swipe)
       } else {
@@ -213,8 +215,12 @@ private struct DayContent: View {
       HStack {
         Text("Logged meals")
         Spacer()
-        Text("\(bundle.entries.count)")
+        if !bundle.entries.isEmpty {
+          Text(
+            "\(bundle.totals.calories, format: .number.precision(.fractionLength(0))) kcal eaten"
+          )
           .monospacedDigit()
+        }
       }
     } footer: {
       if pending > 0 {
@@ -228,7 +234,9 @@ private struct DayContent: View {
   private var placeholder: some View {
     Group {
       Section {
-        SummaryCard(goals: PreviewData.day.goals, totals: PreviewData.day.totals, isToday: true)
+        SummaryCard(goals: PreviewData.day.goals, totals: PreviewData.day.totals) {
+          Text(verbatim: "Basic · 2 100 kcal")
+        }
       }
       Section {
         ForEach(PreviewData.entries) { EntryRow(entry: $0) }
@@ -240,57 +248,58 @@ private struct DayContent: View {
   }
 }
 
-/// "TODAY'S TARGET · Basic · 2,100 kcal"
-private struct TargetRow: View {
+/// "◎ Basic · 2,100 kcal ›". Opens the target sheet.
+private struct TargetButton: View {
   var bundle: DayBundle
   var isToday: Bool
   var action: () -> Void
 
   var body: some View {
+    let name = bundle.target?.name ?? String(localized: "Target")
+    let kcal = bundle.goals.calories.formatted(.number.precision(.fractionLength(0)))
     Button(action: action) {
-      HStack(spacing: 12) {
+      HStack(spacing: 8) {
         Image(systemName: "target")
           .foregroundStyle(Color.brandPrimary)
-          .font(.title3)
           .accessibilityHidden(true)
-        VStack(alignment: .leading, spacing: 2) {
-          Text(isToday ? "TODAY'S TARGET" : "DAY TARGET")
-            .font(.caption2.weight(.semibold))
-            .foregroundStyle(.secondary)
-          Text(
-            "\(bundle.target?.name ?? String(localized: "Target")) · \(bundle.goals.calories, format: .number.precision(.fractionLength(0))) kcal"
-          )
-          .font(.body.weight(.medium))
+        Text("\(name) · \(kcal) kcal")
+          .fontWeight(.semibold)
           .fontDesign(.rounded)
           .monospacedDigit()
-        }
-        Spacer()
+          .foregroundStyle(Color.primary)
+          .lineLimit(3)
         Image(systemName: "chevron.right")
           .font(.footnote.weight(.semibold))
-          .foregroundStyle(.tertiary)
+          .foregroundStyle(Color(.tertiaryLabel))
+          .accessibilityHidden(true)
+        Spacer(minLength: 0)
       }
+      .font(.subheadline)
       .frame(minHeight: 44)
       .contentShape(.rect)
     }
-    .buttonStyle(.plain)
+    // Borderless: only this line opens the sheet, not the whole card row.
+    .buttonStyle(.borderless)
+    .accessibilityLabel(
+      isToday ? "Today's target: \(name), \(kcal) kcal" : "Day target: \(name), \(kcal) kcal"
+    )
     .accessibilityHint("Changes the target for this day")
   }
 }
 
-/// The ring and three bars. Side by side when there is room, stacked otherwise.
-struct SummaryCard: View {
+/// Header, then the ring and three bars. Side by side when there is room, stacked otherwise.
+struct SummaryCard<Header: View>: View {
   var goals: MacroTotals
   var totals: MacroTotals
-  var isToday: Bool
+  @ViewBuilder var header: Header
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 16) {
-      Text(isToday ? "Remaining today" : "Remaining for this day")
-        .font(.headline)
+    VStack(alignment: .leading, spacing: 8) {
+      header
       ViewThatFits(in: .horizontal) {
-        HStack(spacing: 24) {
-          MacroRing(goal: goals.calories, eaten: totals.calories)
-          bars.frame(minWidth: 200)
+        HStack(spacing: 20) {
+          MacroRing(goal: goals.calories, eaten: totals.calories, diameter: 124)
+          bars.frame(minWidth: 170)
         }
         VStack(spacing: 20) {
           MacroRing(goal: goals.calories, eaten: totals.calories)
@@ -299,11 +308,11 @@ struct SummaryCard: View {
       }
       .frame(maxWidth: .infinity)
     }
-    .padding(.vertical, 8)
+    .padding(.bottom, 8)
   }
 
   private var bars: some View {
-    VStack(spacing: 14) {
+    VStack(spacing: 12) {
       MacroBar(title: "Protein", goal: goals.protein, eaten: totals.protein, color: .brandSecondary)
       MacroBar(title: "Carbs", goal: goals.carbs, eaten: totals.carbs, color: .brandAccent)
       MacroBar(title: "Fat", goal: goals.fat, eaten: totals.fat, color: .brandPrimary)
@@ -311,36 +320,39 @@ struct SummaryCard: View {
   }
 }
 
-/// A logged meal: kcal, macro line, title, time. Pending rows show "Waiting to sync".
+/// A logged meal: title and kcal, then macros and time. Pending rows show "Waiting to sync".
 struct EntryRow: View {
   var entry: DayEntry
 
   var body: some View {
-    HStack(alignment: .top, spacing: 12) {
-      VStack(alignment: .leading, spacing: 4) {
-        KcalText(value: entry.entry.calories)
-          .font(.headline)
-        MacroLine(macros: entry.entry.macros)
-          .font(.subheadline)
+    VStack(alignment: .leading, spacing: 4) {
+      HStack(alignment: .firstTextBaseline, spacing: 12) {
         Text(entry.title)
-          .font(.subheadline)
-          .foregroundStyle(.secondary)
+          .font(.body.weight(.semibold))
           .lineLimit(2)
-        if entry.isPending {
-          Label("Waiting to sync", systemImage: "clock.arrow.circlepath")
-            .font(.caption.weight(.medium))
-            .foregroundStyle(Color.brandPrimary)
+        Spacer(minLength: 0)
+        KcalText(value: entry.entry.calories)
+          .font(.subheadline.weight(.semibold))
+          .fixedSize()
+      }
+      HStack(alignment: .firstTextBaseline, spacing: 12) {
+        MacroLine(macros: entry.entry.macros)
+        Spacer(minLength: 0)
+        if let time = entry.entry.createdAt {
+          Text(time, format: .dateTime.hour().minute())
+            .monospacedDigit()
+            .fixedSize()
         }
       }
-      Spacer()
-      if let time = entry.entry.createdAt {
-        Text(time, format: .dateTime.hour().minute())
-          .font(.subheadline)
-          .foregroundStyle(.secondary)
-          .monospacedDigit()
+      .font(.subheadline)
+      .foregroundStyle(.secondary)
+      if entry.isPending {
+        Label("Waiting to sync", systemImage: "clock.arrow.circlepath")
+          .font(.caption.weight(.medium))
+          .foregroundStyle(Color.brandPrimary)
       }
     }
-    .padding(.vertical, 4)
+    .padding(.vertical, 2)
     .contentShape(.rect)
     .accessibilityElement(children: .combine)
   }

@@ -1,15 +1,22 @@
 import EZHAKit
 import SwiftUI
 
-/// Signed-in shell: four tabs, the "Log meal" accessory, the toast, and the logger sheet.
+/// Signed-in shell: four tabs, the "Log meal" tab bar button, the toast, and the logger sheet.
 struct MainShell: View {
   @Environment(AppModel.self) private var appModel
   @Environment(\.scenePhase) private var scenePhase
+  @Environment(\.colorScheme) private var colorScheme
   @State private var loggerDate: DateKey?
 
   var body: some View {
     @Bindable var appModel = appModel
-    TabView(selection: $appModel.selectedTab) {
+    // Selecting the log tab opens the logger and keeps the current tab.
+    let selection = Binding<AppModel.Tab>(
+      get: { appModel.selectedTab },
+      set: { tab in
+        if tab == .log { openLogger() } else { appModel.selectedTab = tab }
+      })
+    TabView(selection: selection) {
       Tab("Today", systemImage: "sun.max", value: AppModel.Tab.today) {
         TodayView(openLogger: openLogger)
       }
@@ -22,16 +29,26 @@ struct MainShell: View {
       Tab("Settings", systemImage: "gearshape", value: AppModel.Tab.settings) {
         SettingsView()
       }
+      // The search role gives the separate round button at the trailing end of the tab bar,
+      // in thumb reach and in the same row as the tabs. Used for the app's primary action.
+      Tab(value: AppModel.Tab.log, role: .search) {
+        Color.clear
+      } label: {
+        Label {
+          Text("Log meal")
+        } icon: {
+          // The tab bar draws template icons in one neutral color. An original-mode image
+          // keeps the brand color, so the primary action stands out.
+          Image(uiImage: logIcon)
+        }
+      }
     }
     .tabBarMinimizeBehavior(.onScrollDown)
     .sensoryFeedback(.success, trigger: appModel.logSuccessCount)
-    .tabViewBottomAccessory {
-      LogAccessory(openLogger: { openLogger() })
-    }
-    .overlay { ToastOverlay(toast: $appModel.toast).padding(.bottom, 110) }
+    .overlay { ToastOverlay(toast: $appModel.toast).padding(.bottom, 64) }
     .sheet(item: $loggerDate) { date in
-      // No zoom transition: dismissing a zoom sheet whose source is in the tab bar
-      // accessory hits a UIKit assertion (_morphPreviewFromCurrentState) on iOS 26.4.
+      // No zoom transition: from the old tab bar accessory source it hit a UIKit assertion
+      // (_morphPreviewFromCurrentState) on iOS 26.4. Not tried from the toolbar button.
       LoggerView(date: date)
     }
     .task {
@@ -55,44 +72,16 @@ struct MainShell: View {
     }
   }
 
+  /// The brand color resolved for the current appearance: an original-mode image does not adapt.
+  private var logIcon: UIImage {
+    let traits = UITraitCollection(userInterfaceStyle: colorScheme == .dark ? .dark : .light)
+    let color = UIColor(Color.brandPrimary).resolvedColor(with: traits)
+    return UIImage(
+      systemName: "plus", withConfiguration: UIImage.SymbolConfiguration(weight: .semibold))?
+      .withTintColor(color, renderingMode: .alwaysOriginal) ?? UIImage()
+  }
+
   private func openLogger(_ date: DateKey? = nil) {
     loggerDate = date ?? appModel.selectedDate
-  }
-}
-
-/// "+ Log meal · 1,460 kcal left"
-struct LogAccessory: View {
-  @Environment(AppModel.self) private var appModel
-  var openLogger: () -> Void
-
-  var body: some View {
-    let bundle = appModel.dayStore.merged(appModel.selectedDate)
-    Button(action: openLogger) {
-      HStack(spacing: 8) {
-        Image(systemName: "plus.circle.fill")
-          .foregroundStyle(Color.brandPrimary)
-          .font(.title3)
-        Text("Log meal").fontWeight(.semibold)
-        if let bundle {
-          let status = Macros.calorieStatus(
-            goal: bundle.goals.calories, eaten: bundle.totals.calories)
-          Text("·").foregroundStyle(.secondary)
-          Text(
-            status.isOver
-              ? "\(status.value, format: .number.precision(.fractionLength(0))) kcal over"
-              : "\(status.value, format: .number.precision(.fractionLength(0))) kcal left"
-          )
-          .foregroundStyle(.secondary)
-          .fontDesign(.rounded)
-          .monospacedDigit()
-          .contentTransition(.numericText(value: status.value))
-        }
-      }
-      .frame(maxWidth: .infinity)
-      .frame(minHeight: 44)
-      .contentShape(.rect)
-    }
-    .buttonStyle(.plain)
-    .accessibilityIdentifier("logAccessory")
   }
 }

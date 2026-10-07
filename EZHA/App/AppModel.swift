@@ -25,6 +25,8 @@ final class AppModel {
     case suggestions
     case library
     case settings
+    /// Not a screen: the "Log meal" button in the tab bar. Selecting it opens the logger.
+    case log
   }
 
   private(set) var session: Session = .loading

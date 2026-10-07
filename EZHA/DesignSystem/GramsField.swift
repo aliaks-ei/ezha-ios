@@ -19,7 +19,7 @@ struct GramsField: View {
         decrements += 1
         onStep(-step)
       } label: {
-        Image(systemName: "minus").frame(width: 44, height: 44).contentShape(.rect)
+        Image(systemName: "minus").frame(minWidth: 44, minHeight: 44).contentShape(.rect)
       }
       .buttonRepeatBehavior(.enabled)
       .accessibilityLabel("Decrease")
@@ -40,7 +40,7 @@ struct GramsField: View {
         increments += 1
         onStep(step)
       } label: {
-        Image(systemName: "plus").frame(width: 44, height: 44).contentShape(.rect)
+        Image(systemName: "plus").frame(minWidth: 44, minHeight: 44).contentShape(.rect)
       }
       .buttonRepeatBehavior(.enabled)
       .accessibilityLabel("Increase")

@@ -7,10 +7,20 @@ struct MacroRing: View {
   var goal: Double
   var eaten: Double
 
-  @ScaledMetric(relativeTo: .largeTitle) private var size: CGFloat = 168
-  @ScaledMetric(relativeTo: .largeTitle) private var lineWidth: CGFloat = 16
+  @ScaledMetric private var size: CGFloat
+  @ScaledMetric private var lineWidth: CGFloat
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @State private var hasAppeared = false
+
+  /// `diameter` is at the default text size. It scales with Dynamic Type.
+  init(goal: Double, eaten: Double, diameter: CGFloat = 168) {
+    self.goal = goal
+    self.eaten = eaten
+    _size = ScaledMetric(wrappedValue: diameter, relativeTo: .largeTitle)
+    _lineWidth = ScaledMetric(wrappedValue: (diameter / 10.5).rounded(), relativeTo: .largeTitle)
+  }
+
+  private var isCompact: Bool { size < 150 }
 
   private var status: (value: Double, isOver: Bool) {
     Macros.calorieStatus(goal: goal, eaten: eaten)
@@ -47,17 +57,17 @@ struct MacroRing: View {
       }
       VStack(spacing: 0) {
         Text(status.value, format: .number.precision(.fractionLength(0)))
-          .font(.system(.largeTitle, design: .rounded, weight: .bold))
+          .font(.system(isCompact ? .title : .largeTitle, design: .rounded, weight: .bold))
           .monospacedDigit()
           .contentTransition(.numericText(value: status.value))
           .foregroundStyle(status.isOver ? Color.danger : Color.primary)
           .minimumScaleFactor(0.5)
           .lineLimit(1)
         Text(status.isOver ? "kcal over" : "kcal left")
-          .font(.subheadline)
+          .font(isCompact ? .footnote : .subheadline)
           .foregroundStyle(.secondary)
       }
-      .padding(lineWidth * 1.5)
+      .padding(lineWidth * (isCompact ? 1.2 : 1.5))
     }
     .frame(width: size, height: size)
     .animation(

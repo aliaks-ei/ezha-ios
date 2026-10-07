@@ -261,12 +261,7 @@ struct AddFoodSheet: View {
         DocumentScanner { data in Task { await photo.attach(data, isLabel: true) } }
           .ignoresSafeArea()
       }
-      .sheet(
-        isPresented: Binding(get: { consentAction != nil }, set: { if !$0 { consentAction = nil } })
-      ) {
-        let action = consentAction
-        AIConsentSheet { action?() }
-      }
+      .aiConsentAlert($consentAction)
     }
   }
 
@@ -275,19 +270,18 @@ struct AddFoodSheet: View {
     Section {
       HStack(spacing: 8) {
         if CameraPicker.isAvailable {
-          Button("Camera", systemImage: "camera") { isCameraPresented = true }
+          AttachmentButton(title: "Camera", systemImage: "camera") { isCameraPresented = true }
         }
-        Button("Photos", systemImage: "photo.on.rectangle") { isPhotosPresented = true }
-          .accessibilityIdentifier("addFoodPhotos")
+        AttachmentButton(title: "Photos", systemImage: "photo.on.rectangle") {
+          isPhotosPresented = true
+        }
+        .accessibilityIdentifier("addFoodPhotos")
         if DocumentScanner.isAvailable {
-          Button("Scan label", systemImage: "doc.text.viewfinder") {
+          AttachmentButton(title: "Scan label", systemImage: "doc.text.viewfinder") {
             runAI { isScannerPresented = true }
           }
         }
       }
-      .buttonStyle(.glass)
-      .labelStyle(.iconOnly)
-      .font(.title3)
       if let data = photo.imageData, let image = UIImage(data: data) {
         Image(uiImage: image)
           .resizable()

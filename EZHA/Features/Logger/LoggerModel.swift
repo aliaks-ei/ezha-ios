@@ -55,7 +55,8 @@ final class LoggerModel {
   private(set) var stage: Stage?
   var errorMessage: String?
   private(set) var isSaving = false
-  private(set) var draftSaveFailed = false
+  /// The library item being added from "Add from library", while its ingredients load.
+  private(set) var quickAddingId: UUID?
   /// Incremented after each estimate, for the item insert animation and haptics.
   private(set) var estimateCount = 0
 
@@ -86,6 +87,8 @@ final class LoggerModel {
   }
 
   var isEstimating: Bool { stage != nil }
+  /// Text, a photo, or items. Closing asks before discarding them.
+  var hasInput: Bool { !state.isEmpty || imageData != nil }
   var totals: MacroTotals { LogItemMath.totals(state.items) }
   var hasAIItems: Bool { state.items.contains { $0.origin == .ai } }
   var showsLabelOverrides: Bool { state.aiItemsFromLabel && hasAIItems }
@@ -150,10 +153,8 @@ final class LoggerModel {
         try await appModel.sync.draftStore.save(
           date, state: JSONEncoder.ezha.encode(state), imageData: imageData)
       }
-      draftSaveFailed = false
       return true
     } catch {
-      draftSaveFailed = true
       return false
     }
   }
@@ -292,6 +293,27 @@ final class LoggerModel {
     }
     if state.selectedLibraryFoodName == nil { state.selectedLibraryFoodName = foodName }
     state.usedMealIds.append(contentsOf: mealIds.filter { !state.usedMealIds.contains($0) })
+  }
+
+  /// Adds one library food (default grams) or meal (its ingredients) to the meal.
+  func quickAdd(_ food: SavedFood) async {
+    errorMessage = nil
+    guard food.isMeal else {
+      addLibraryItems([LogItemMath.fromSavedFood(food)], foodName: food.name, mealIds: [])
+      return
+    }
+    quickAddingId = food.id
+    defer { quickAddingId = nil }
+    do {
+      let items = LogItemMath.fromSavedMeal(try await appModel.libraryStore.ingredients(for: food))
+      guard !items.isEmpty, !items.contains(where: \.isNutritionMissing) else {
+        errorMessage = String(localized: "\(food.name) has missing nutrition. Choose another item.")
+        return
+      }
+      addLibraryItems(items, foodName: food.name, mealIds: [food.id])
+    } catch {
+      errorMessage = OnlineError.message(for: error)
+    }
   }
 
   func removeItem(_ id: UUID) {

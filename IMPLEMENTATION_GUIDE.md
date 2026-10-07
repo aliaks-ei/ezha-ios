@@ -418,7 +418,7 @@ Other rules:
 
 ### 7.1 Principles
 
-- Liquid Glass belongs to the **navigation layer only**: tab bar, toolbars, the log accessory, floating buttons, toasts, sheet chrome. Content (ring card, entry rows, forms) uses solid grouped surfaces. The PWA used glass everywhere. Do not copy that.
+- Liquid Glass belongs to the **navigation layer only**: tab bar, toolbars, floating buttons, toasts, sheet chrome. Content (ring card, entry rows, forms) uses solid grouped surfaces. The PWA used glass everywhere. Do not copy that.
 - Use system components first: `List`, `Form`, `Section`, `.searchable`, `Menu`, `confirmationDialog`, `swipeActions`, `contextMenu`, `ContentUnavailableView`, `.refreshable`, sheets with detents.
 - Use SF Symbols only. Use `.fontDesign(.rounded)` and `.monospacedDigit()` for all numbers.
 - Use Dynamic Type text styles only. No fixed point sizes. Scale the ring with `@ScaledMetric`.
@@ -459,7 +459,7 @@ Add these to the asset catalog as color sets with light and dark variants. They 
 | --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Ring and bars on appear or change | `.spring(duration: 0.8, bounce: 0.15)`. Numbers roll with `numericText`.                                                                                                                                          |
 | Day change (swipe or chevron)     | Horizontal paging. Content uses `.transition(.push(from:))` by direction. `.sensoryFeedback(.selection)`.                                                                                                         |
-| Open logger                       | Zoom transition from the log accessory or button (`matchedTransitionSource` + `.navigationTransition(.zoom)`).                                                                                                    |
+| Open logger                       | Zoom transition from the log button (`matchedTransitionSource` + `.navigationTransition(.zoom)`).                                                                                                    |
 | AI estimating                     | The composer border shows a slow moving `MeshGradient` shimmer. A sparkles symbol with `.symbolEffect(.variableColor.iterative)`. Stage text crossfades: "Uploading photo…", "Reading your meal…", "Finalizing…". |
 | Estimate result                   | Item cards insert one by one (50 ms stagger), move + opacity.                                                                                                                                                     |
 | Meal logged                       | Sheet dismisses. The new row inserts with a spring. The ring animates. `.sensoryFeedback(.success)`.                                                                                                              |
@@ -476,9 +476,8 @@ Reduce Motion (`@Environment(\.accessibilityReduceMotion)`): replace springs, pu
 
 The shell is a `TabView` with four tabs: **Today** (`sun.max`), **Suggestions** (`sparkles`), **Library** (`books.vertical`), **Settings** (`gearshape`).
 
-- Log meal action: `tabViewBottomAccessory` with a glass bar: "+ Log meal · 1,460 kcal left". Tap opens the logger for the selected date.
+- Log meal action: a fifth `Tab("Log meal", systemImage: "plus", value: .log, role: .search)`. The search role draws it as the separate round button at the trailing end of the tab bar, in the same row and in thumb reach (the Telegram layout). Selecting it opens the logger for the selected date and keeps the current tab (a custom selection binding never stores `.log`). This bends the HIG rule "tabs are for navigation" on purpose; the alternatives were a second full-width bar (`tabViewBottomAccessory`) or a floating button above the tab bar.
 - Use `.tabBarMinimizeBehavior(.onScrollDown)`.
-- Today also has a toolbar `+` button.
 - If an API name differs in iOS 26, use the closest native equivalent and report it.
 
 ### 8.1 Auth (signed out)
@@ -505,20 +504,19 @@ Show after sign-in when the user's only target has all zeros:
 
 Top to bottom:
 
-1. Navigation title = day label ("Today" / "Sat, Oct 4"), large.
-   - Toolbar: a calendar button that opens a graphical `DatePicker` in a popover, limited to `...today`, with a "Today" button. When not on today, add a "Today" capsule button.
+1. Navigation title = day label ("Today" / "Sat, Oct 4"), `.toolbarTitleDisplayMode(.inlineLarge)`: large, in the same row as the buttons.
+   - Toolbar: a calendar button that opens a graphical `DatePicker` in a popover, limited to `...today`, with a "Today" button. When not on today, add a "Today" button.
    - Swipe left/right on the content to change the day. The right swipe stops at today with a soft haptic bounce.
-2. Target row: target icon, small caps "TODAY'S TARGET" or "DAY TARGET", "Basic · 2,100 kcal", chevron. Tap opens the Target sheet.
-3. Summary card: `MacroRing` plus three `MacroBar`s (Protein = secondary, Carbs = accent, Fat = primary). Title "Remaining today" or "Remaining for this day". On narrow widths the ring sits above the bars. On wide widths they sit side by side. Use `ViewThatFits`.
-4. "Logged meals" section with an entry count.
-   - Row (collapsed): **640 kcal**, `MacroLine`, the entry title in secondary text, and a time on the right. A pending row shows a `clock.arrow.circlepath` badge, "Waiting to sync".
+2. Summary card. Header: target icon, "Basic · 2,100 kcal", chevron. Tap the header to open the Target sheet. Below it: `MacroRing` (124 pt) and three `MacroBar`s (Protein = secondary, Carbs = accent, Fat = primary) side by side. When they do not fit (large text), the ring sits above the bars. Use `ViewThatFits`.
+3. "Logged meals" section. The header shows "760 kcal eaten".
+   - Row: the entry title first (semibold) with kcal on the right, then `MacroLine` with the time on the right, in secondary text. A pending row shows a `clock.arrow.circlepath` badge, "Waiting to sync".
    - Tap opens the **Entry detail** sheet (medium/large): title, time · source label · "AI 80%". Item list with grams and macros. Photo thumbnail if `image_path` (signed URL, cached). Actions: "Log again" (copies the items to the selected date, new UUIDs), "Save as meal" (`save_meal`), and Delete.
    - Swipe trailing: Delete (no confirm, undo toast). Context menu: Log again, Save as meal, Delete.
    - Source labels: library → "Library", text → "AI: text", food_photo → "AI: photo", label_photo → "AI: label", unknown → "AI: photo" if `image_path`, else "AI: text".
-5. Empty state: `ContentUnavailableView("Nothing logged yet", systemImage: "fork.knife", description: "Tap Log meal to add your first meal.")`.
-6. Loading: redacted placeholders (`.redacted(reason: .placeholder)`) in the card and two rows. Show only when there is no cached bundle.
-7. Error: an inline banner with a "Try again" button. Keep cached content visible.
-8. `.refreshable` refetches the day and runs the outbox.
+4. Empty state: `ContentUnavailableView` "Nothing logged yet", `fork.knife`, "Log your first meal of the day.", and a "Log meal" button.
+5. Loading: redacted placeholders (`.redacted(reason: .placeholder)`) in the card and two rows. Show only when there is no cached bundle.
+6. Error: an inline banner with a "Try again" button. Keep cached content visible.
+7. `.refreshable` refetches the day and runs the outbox.
 
 **Target sheet** (medium detent):
 
@@ -532,17 +530,17 @@ The navigation title is "Log meal". The subtitle is the day label ("Today", "Oct
 
 Closing:
 
-- Close saves the draft and dismisses.
-- If the draft failed to save, show an alert ("Your draft could not be saved…") and do not dismiss.
+- Close discards the input, so the next open starts empty. With input, confirm first ("Discard this meal?": "Discard meal" / "Keep editing"). Swipe-down is off while there is input.
 
 Composer (top):
 
-- Multiline `TextField("What did you eat?", axis: .vertical)` with the placeholder "e.g. 150g chicken, rice and a little olive oil". "(optional)" appears when a photo is attached.
-- Attachment row of glass buttons:
+- Multiline `TextField("What did you eat?", axis: .vertical)` with the placeholder "Describe your meal, e.g. 150 g chicken and rice". With a photo the placeholder is "Add details (optional)".
+- Attachment row of `AttachmentButton`s (tinted bordered, one-line labels, not glass):
   - **Camera**: a `UIImagePickerController` camera wrapper.
   - **Photos**: `PhotosPicker`, images only.
   - **Scan label**: `VNDocumentCameraViewController`. Take the first page. It sets "This is a nutrition label" on.
-  - **Library**: pushes the Library picker inside the logger's `NavigationStack`.
+- "Add from library" section: the 5 most recently used library items not yet in the meal. One tap adds an item (food at its default grams, meal as its ingredients). The last row, "Search library", pushes the Library picker inside the logger's `NavigationStack`.
+- The bottom bar holds the primary button and, while the keyboard is up, a "Hide keyboard" button. No keyboard toolbar: it overlaps the bottom bar.
 - Photo preview: a rounded thumbnail with a remove (×) button. A "Nutrition label" toggle. When on, a "Grams eaten" decimal field (optional).
 - Hide the Camera and Scan buttons when no camera is available (Simulator).
 
@@ -568,8 +566,8 @@ Bottom bar (`safeAreaInset(edge: .bottom)`, glass):
 
 Drafts:
 
-- One draft per date. Save debounced 400 ms (max wait 1.2 s) on any change, and on `scenePhase` going to background.
-- Restore on open. Clear after a successful log or on Clear draft.
+- One draft per date. Save debounced 400 ms (max wait 1.2 s) on any change, and on `scenePhase` going to background. The draft only survives the app being closed by the system while the logger is open.
+- Restore on open. Clear after a successful log, on Clear draft, and on Close.
 
 ### 8.5 Library picker (inside the logger)
 
@@ -643,7 +641,7 @@ Drafts:
 
 ### 9.4 Privacy and App Store
 
-- **AI consent.** Before the first AI request, show a sheet: photos and descriptions are sent to our server and to OpenAI to estimate nutrition and suggest meals. Buttons "Allow" / "Not now". Store the answer. Without consent, the estimate, scan, and suggestion actions show the sheet again. Library and manual logging still work. Check the current App Store Review Guideline 5.1.2 text on third-party AI before release.
+- **AI consent.** Before the first AI request, show an alert (not a sheet: AI actions start inside sheets, and sheets must not stack): photos and descriptions are sent to our server and to OpenAI to estimate nutrition and suggest meals. Buttons "Allow" / "Not now". Store the answer. Without consent, the estimate, scan, and suggestion actions show the alert again. Onboarding shows the full consent screen. Library and manual logging still work. Check the current App Store Review Guideline 5.1.2 text on third-party AI before release.
 - `PrivacyInfo.xcprivacy`: declare `UserDefaults` API use (reason `CA92.1`) and collected data types (email, health and fitness data / food logs, photos, user ID). Purpose: app functionality. No tracking.
 - Usage descriptions: `NSCameraUsageDescription` ("Take a photo of your meal or a nutrition label to estimate its nutrition."). `PhotosPicker` needs no photo library permission.
 - Account deletion in Settings (8.8).
@@ -803,7 +801,7 @@ Checks marked **(handoff)** need a physical device, a dashboard, or an account o
 | Calories ring shows 0 left when over                                      | Shows "N kcal over"                                       | Clearer                                   |
 | Glass on every surface                                                    | Glass on the navigation layer only                        | iOS 26 design guidance                    |
 | Non-streaming estimate                                                    | Streaming with stage progress and cancel                  | Feels faster                              |
-| Center + tab button                                                       | Tab bar bottom accessory "Log meal · N kcal left"         | Native iOS 26 pattern, shows key info     |
+| Center + tab button                                                       | Round `+` at the end of the tab bar (search-role tab)     | Thumb reach, one bottom row, on every tab |
 | Saved meal recipes cannot be edited                                       | Meal editor + `save_meal`                                 | Follow-up from `docs/mobile-ux-review.md` |
 | No password reset, no account deletion                                    | Both added                                                | Expected / required on iOS                |
 | Suggestions are read-only                                                 | "Log this" prefills the logger                            | Closes the loop                           |

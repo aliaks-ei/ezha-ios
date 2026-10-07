@@ -22,7 +22,9 @@ struct LoggerView: View {
       await model.restore()
       self.model = model
     }
-    .interactiveDismissDisabled(model?.isEstimating == true || model?.isSaving == true)
+    // Swipe-down would discard the meal without asking, so it is off while there is input.
+    .interactiveDismissDisabled(
+      model?.isEstimating == true || model?.isSaving == true || model?.hasInput == true)
   }
 }
 
@@ -40,9 +42,10 @@ private struct LoggerContent: View {
   @State private var isLibraryPresented = false
   @State private var consentAction: (() -> Void)?
   @State private var isClearConfirmPresented = false
-  @State private var isDraftAlertPresented = false
+  @State private var isDiscardConfirmPresented = false
   @State private var labelFields = MacroFieldsModel()
   @FocusState private var isTextFocused: Bool
+  @State private var isKeyboardVisible = false
 
   var body: some View {
     List {
@@ -50,7 +53,8 @@ private struct LoggerContent: View {
         composer
       }
       .listRowBackground(Color.clear)
-      .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+      // No insets: the card is as wide as the list sections below it.
+      .listRowInsets(EdgeInsets())
 
       if let error = model.errorMessage {
         Section {
@@ -65,7 +69,11 @@ private struct LoggerContent: View {
       if !model.state.items.isEmpty {
         reviewSections
       }
+
+      quickAddSection
     }
+    .listSectionSpacing(.compact)
+    .contentMargins(.top, 8, for: .scrollContent)
     .scrollDismissesKeyboard(.interactively)
     .animation(
       reduceMotion ? .easeInOut(duration: 0.2) : .spring(duration: 0.4),
@@ -77,10 +85,6 @@ private struct LoggerContent: View {
     .toolbar {
       ToolbarItem(placement: .cancellationAction) {
         Button("Close", systemImage: "xmark") { close() }
-      }
-      ToolbarItemGroup(placement: .keyboard) {
-        Spacer()
-        Button("Done") { hideKeyboard() }
       }
     }
     .safeAreaInset(edge: .bottom) { bottomBar }
@@ -107,13 +111,7 @@ private struct LoggerContent: View {
       DocumentScanner { data in Task { await model.attachPhoto(data, isLabel: true) } }
         .ignoresSafeArea()
     }
-    .sheet(
-      isPresented: Binding(
-        get: { consentAction != nil }, set: { if !$0 { consentAction = nil } })
-    ) {
-      let action = consentAction
-      AIConsentSheet { action?() }
-    }
+    .aiConsentAlert($consentAction)
     .confirmationDialog(
       "Clear this draft?", isPresented: $isClearConfirmPresented, titleVisibility: .visible
     ) {
@@ -121,37 +119,41 @@ private struct LoggerContent: View {
     } message: {
       Text("The description, photo, and items are removed.")
     }
-    .alert("Your draft could not be saved", isPresented: $isDraftAlertPresented) {
+    .confirmationDialog(
+      "Discard this meal?", isPresented: $isDiscardConfirmPresented, titleVisibility: .visible
+    ) {
+      Button("Discard meal", role: .destructive) { discardAndClose() }
       Button("Keep editing", role: .cancel) {}
-      Button("Close anyway", role: .destructive) { dismiss() }
     } message: {
-      Text("Closing now loses this draft.")
+      Text("The description, photo, and items are removed.")
     }
     .onChange(of: scenePhase) { _, phase in
       if phase == .background { Task { await model.saveDraftNow() } }
     }
     .sensoryFeedback(.success, trigger: model.estimateCount)
+    .task { await appModel.libraryStore.load() }
+    .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification))
+    {
+      _ in isKeyboardVisible = true
+    }
+    .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification))
+    {
+      _ in isKeyboardVisible = false
+    }
   }
 
   // MARK: Composer
 
   private var composer: some View {
     VStack(alignment: .leading, spacing: 12) {
-      Group {
-        if model.imageData != nil {
-          Text(
-            "\(Text("What did you eat?").font(.headline)) \(Text("(optional)").font(.subheadline).foregroundStyle(.secondary))"
-          )
-        } else {
-          Text("What did you eat?").font(.headline)
-        }
-      }
-      .fixedSize(horizontal: false, vertical: true)
       TextField(
         "What did you eat?", text: $model.state.text,
-        prompt: Text("e.g. 150g chicken, rice and a little olive oil"), axis: .vertical
+        prompt: Text(
+          model.imageData == nil
+            ? "Describe your meal, e.g. 150 g chicken and rice" : "Add details (optional)"),
+        axis: .vertical
       )
-      .lineLimit(dynamicTypeSize.isAccessibilitySize ? 4...10 : 2...6)
+      .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3...10 : 2...6)
       .focused($isTextFocused)
       .disabled(model.isEstimating)
       .accessibilityIdentifier("mealText")
@@ -178,15 +180,16 @@ private struct LoggerContent: View {
         .accessibilityElement(children: .combine)
       }
     }
-    .padding()
+    .padding(12)
     .background(Color.surface, in: .rect(cornerRadius: 20, style: .continuous))
     .shimmerBorder(model.isEstimating)
     .animation(.smooth, value: model.isEstimating)
   }
 
+  /// Camera, Photos, and Scan label. Library items are in the "Add from library" section.
   private var attachments: some View {
     ViewThatFits(in: .horizontal) {
-      HStack(spacing: 6) { attachmentButtons(compact: true) }
+      HStack(spacing: 8) { attachmentButtons(compact: true) }
       ScrollView(.horizontal, showsIndicators: false) {
         HStack(spacing: 8) { attachmentButtons(compact: false) }
       }
@@ -213,27 +216,48 @@ private struct LoggerContent: View {
         runAI { isScannerPresented = true }
       }
     }
-    attachmentButton(
-      "Library", systemImage: "books.vertical", id: "attachLibrary", compact: compact
-    ) {
-      isLibraryPresented = true
-    }
   }
 
   private func attachmentButton(
     _ title: LocalizedStringKey, systemImage: String, id: String, compact: Bool,
     action: @escaping () -> Void
   ) -> some View {
-    Button(action: action) {
-      VStack(spacing: 4) {
-        Image(systemName: systemImage).font(.title3)
-        Text(title).font(.caption.weight(.medium)).lineLimit(2).multilineTextAlignment(.center)
+    AttachmentButton(title: title, systemImage: systemImage, fills: compact, action: action)
+      .accessibilityIdentifier(id)
+  }
+
+  // MARK: Add from library
+
+  /// Recently used library items not yet in the meal. One tap adds an item.
+  @ViewBuilder
+  private var quickAddSection: some View {
+    let store = appModel.libraryStore
+    let addedFoods = Set(model.state.items.compactMap(\.linkedFoodId))
+    let foods = store.sortedFoods
+      .filter { !addedFoods.contains($0.id) && !model.state.usedMealIds.contains($0.id) }
+      .prefix(5)
+    if !store.foods.isEmpty && !model.isEstimating {
+      Section {
+        ForEach(foods) { food in
+          Button {
+            Task { await model.quickAdd(food) }
+          } label: {
+            QuickAddRow(food: food, isLoading: model.quickAddingId == food.id)
+          }
+          .buttonStyle(.plain)
+          .disabled(model.quickAddingId != nil)
+        }
+        Button {
+          isLibraryPresented = true
+        } label: {
+          Label("Search library", systemImage: "magnifyingglass")
+            .frame(minHeight: 44)
+        }
+        .accessibilityIdentifier("attachLibrary")
+      } header: {
+        Text("Add from library")
       }
-      .frame(maxWidth: compact ? .infinity : nil, minHeight: 44)
-      .padding(.horizontal, compact ? 0 : 8)
     }
-    .buttonStyle(.glass)
-    .accessibilityIdentifier(id)
   }
 
   private func photoPreview(_ image: UIImage) -> some View {
@@ -333,26 +357,45 @@ private struct LoggerContent: View {
           .foregroundStyle(.secondary)
           .multilineTextAlignment(.center)
       }
-      Button(action: primary) {
-        Group {
-          if model.isSaving {
-            ProgressView()
-          } else if model.primaryAction == .estimate {
-            Label("Estimate nutrition", systemImage: "sparkles")
-          } else {
-            Text(
-              "Log meal · \(model.totals.calories, format: .number.precision(.fractionLength(0))) kcal"
-            )
-            .monospacedDigit()
+      // The keyboard button sits in this row, not in a keyboard toolbar, so the two never overlap.
+      HStack(spacing: 8) {
+        Button(action: primary) {
+          Group {
+            if model.isSaving {
+              ProgressView()
+            } else if model.primaryAction == .estimate {
+              Label("Estimate nutrition", systemImage: "sparkles")
+            } else {
+              // Short label when the full one does not fit on one line (large text).
+              ViewThatFits(in: .horizontal) {
+                Text(
+                  "Log meal · \(model.totals.calories, format: .number.precision(.fractionLength(0))) kcal"
+                )
+                .monospacedDigit()
+                .fixedSize()
+                Text("Log meal").fixedSize()
+              }
+            }
           }
+          .font(.headline)
+          .frame(maxWidth: .infinity, minHeight: 36)
         }
-        .font(.headline)
-        .frame(maxWidth: .infinity, minHeight: 36)
+        .buttonStyle(.glassProminent)
+        .controlSize(.large)
+        .disabled(isPrimaryDisabled)
+        .accessibilityIdentifier("loggerPrimary")
+        if isKeyboardVisible {
+          Button("Hide keyboard", systemImage: "keyboard.chevron.compact.down") { hideKeyboard() }
+            .labelStyle(.iconOnly)
+            .font(.headline)
+            .frame(minWidth: 36, minHeight: 36)
+            .buttonStyle(.glass)
+            .buttonBorderShape(.circle)
+            .controlSize(.large)
+            .transition(.opacity)
+        }
       }
-      .buttonStyle(.glassProminent)
-      .controlSize(.large)
-      .disabled(isPrimaryDisabled)
-      .accessibilityIdentifier("loggerPrimary")
+      .animation(.smooth(duration: 0.2), value: isKeyboardVisible)
     }
     .padding(.horizontal)
     .padding(.vertical, 8)
@@ -386,14 +429,20 @@ private struct LoggerContent: View {
     }
   }
 
+  /// Close starts the next meal fresh: it discards the input, after a confirmation when there is any.
   private func close() {
     model.cancelEstimate()
+    if model.hasInput {
+      isDiscardConfirmPresented = true
+    } else {
+      discardAndClose()
+    }
+  }
+
+  private func discardAndClose() {
     Task {
-      if await model.saveDraftNow() {
-        dismiss()
-      } else {
-        isDraftAlertPresented = true
-      }
+      await model.clearDraft()
+      dismiss()
     }
   }
 
@@ -404,12 +453,44 @@ private struct LoggerContent: View {
   }
 }
 
+/// A library item with an add button: "Greek yogurt" / "Per 100g · 59 kcal".
+private struct QuickAddRow: View {
+  var food: SavedFood
+  var isLoading: Bool
+
+  var body: some View {
+    HStack(spacing: 12) {
+      VStack(alignment: .leading, spacing: 2) {
+        Text(food.name).lineLimit(2)
+        Text(LibraryFilter.subtitle(food))
+          .font(.subheadline)
+          .foregroundStyle(.secondary)
+          .monospacedDigit()
+      }
+      Spacer()
+      if isLoading {
+        ProgressView()
+      } else {
+        Image(systemName: "plus.circle.fill")
+          .font(.title2)
+          .foregroundStyle(Color.brandPrimary)
+      }
+    }
+    .frame(minHeight: 44)
+    .contentShape(.rect)
+    .accessibilityElement(children: .combine)
+    .accessibilityLabel("Add \(food.name)")
+    .accessibilityValue(LibraryFilter.subtitle(food))
+  }
+}
+
 /// One item: name, grams with stepper, live macros, and remove.
 private struct ItemCard: View {
   var model: LoggerModel
   var item: LogItem
   var index: Int
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @Environment(\.dynamicTypeSize) private var dynamicTypeSize
   @State private var isVisible = false
 
   var body: some View {
@@ -430,15 +511,22 @@ private struct ItemCard: View {
         .foregroundStyle(.secondary)
         .accessibilityLabel("Remove \(item.name)")
       }
-      HStack {
-        MacroLine(macros: macros)
-          .font(.caption)
-          .foregroundStyle(.secondary)
-        Spacer()
-        GramsField(
-          text: Binding(get: { item.gramsText }, set: { model.setGrams(item.id, $0) }),
-          onStep: { model.step(item.id, by: $0) },
-          onFocusLost: { model.gramsFocusLost(item.id) })
+      let macroLine = MacroLine(macros: macros)
+        .font(.caption)
+        .foregroundStyle(.secondary)
+      let grams = GramsField(
+        text: Binding(get: { item.gramsText }, set: { model.setGrams(item.id, $0) }),
+        onStep: { model.step(item.id, by: $0) },
+        onFocusLost: { model.gramsFocusLost(item.id) })
+      if dynamicTypeSize.isAccessibilitySize {
+        macroLine
+        grams
+      } else {
+        HStack {
+          macroLine
+          Spacer()
+          grams
+        }
       }
       if item.isNutritionMissing {
         Text("Nutrition is missing. Remove this item to log the rest of your meal.")
