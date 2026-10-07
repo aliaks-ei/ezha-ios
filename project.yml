@@ -1,7 +1,7 @@
 # XcodeGen spec. Regenerate EZHA.xcodeproj with `xcodegen generate`.
 name: EZHA
 options:
-  bundleIdPrefix: com.aliaksei
+  bundleIdPrefix: com.productlabdh
   deploymentTarget:
     iOS: "26.0"
   defaultSourceDirectoryType: syncedFolder
@@ -13,7 +13,7 @@ settings:
   base:
     SWIFT_VERSION: "6.0"
     SWIFT_STRICT_CONCURRENCY: complete
-    DEVELOPMENT_TEAM: KR28FZDJ39
+    DEVELOPMENT_TEAM: 7K4AP6UBNJ
     CODE_SIGN_STYLE: Automatic
     TARGETED_DEVICE_FAMILY: "1,2"
     MARKETING_VERSION: "1.0"
@@ -44,7 +44,7 @@ targets:
         PRIVACY_POLICY_URL: $(PRIVACY_POLICY_URL)
         NSCameraUsageDescription: Take a photo of your meal or a nutrition label to estimate its nutrition.
         CFBundleURLTypes:
-          - CFBundleURLName: com.aliaksei.ezha
+          - CFBundleURLName: com.productlabdh.ezha.ios
             CFBundleURLSchemes: [ezha]
         UILaunchScreen:
           UIColorName: Canvas
@@ -64,11 +64,11 @@ targets:
     entitlements:
       path: EZHA/EZHA.entitlements
       properties:
-        com.apple.security.application-groups: [group.com.aliaksei.ezha]
+        com.apple.security.application-groups: [group.com.productlabdh.ezha]
         com.apple.developer.applesignin: [Default]
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.aliaksei.ezha
+        PRODUCT_BUNDLE_IDENTIFIER: com.productlabdh.ezha.ios
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
   EZHAWidgets:
@@ -93,10 +93,10 @@ targets:
     entitlements:
       path: EZHAWidgets/EZHAWidgets.entitlements
       properties:
-        com.apple.security.application-groups: [group.com.aliaksei.ezha]
+        com.apple.security.application-groups: [group.com.productlabdh.ezha]
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.aliaksei.ezha.widgets
+        PRODUCT_BUNDLE_IDENTIFIER: com.productlabdh.ezha.ios.widgets
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME: WidgetBackground
 schemes:

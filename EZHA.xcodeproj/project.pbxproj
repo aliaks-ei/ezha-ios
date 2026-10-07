@@ -232,11 +232,11 @@
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
 					1359AB9CFC236479BEF6AE0D = {
-						DevelopmentTeam = KR28FZDJ39;
+						DevelopmentTeam = 7K4AP6UBNJ;
 						ProvisioningStyle = Automatic;
 					};
 					DCD5D88FDDD98FE40C426CDD = {
-						DevelopmentTeam = KR28FZDJ39;
+						DevelopmentTeam = 7K4AP6UBNJ;
 						ProvisioningStyle = Automatic;
 					};
 				};
@@ -320,7 +320,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.aliaksei.ezha;
+				PRODUCT_BUNDLE_IDENTIFIER = com.productlabdh.ezha.ios;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
@@ -338,7 +338,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.aliaksei.ezha.widgets;
+				PRODUCT_BUNDLE_IDENTIFIER = com.productlabdh.ezha.ios.widgets;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
@@ -382,7 +382,7 @@
 				COPY_PHASE_STRIP = NO;
 				CURRENT_PROJECT_VERSION = 1;
 				DEBUG_INFORMATION_FORMAT = dwarf;
-				DEVELOPMENT_TEAM = KR28FZDJ39;
+				DEVELOPMENT_TEAM = 7K4AP6UBNJ;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
@@ -429,7 +429,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.aliaksei.ezha.widgets;
+				PRODUCT_BUNDLE_IDENTIFIER = com.productlabdh.ezha.ios.widgets;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
@@ -473,7 +473,7 @@
 				COPY_PHASE_STRIP = NO;
 				CURRENT_PROJECT_VERSION = 1;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
-				DEVELOPMENT_TEAM = KR28FZDJ39;
+				DEVELOPMENT_TEAM = 7K4AP6UBNJ;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
@@ -513,7 +513,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.aliaksei.ezha;
+				PRODUCT_BUNDLE_IDENTIFIER = com.productlabdh.ezha.ios;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
