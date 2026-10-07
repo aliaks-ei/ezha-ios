@@ -35,6 +35,7 @@ private struct LoggerContent: View {
   @Environment(\.scenePhase) private var scenePhase
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+  @Environment(\.colorScheme) private var colorScheme
   @State private var photoItem: PhotosPickerItem?
   @State private var isPhotosPresented = false
   @State private var isCameraPresented = false
@@ -43,57 +44,85 @@ private struct LoggerContent: View {
   @State private var consentAction: (() -> Void)?
   @State private var isClearConfirmPresented = false
   @State private var isDiscardConfirmPresented = false
-  @State private var labelFields = MacroFieldsModel()
+  @State private var isEditingSource = false
   @FocusState private var isTextFocused: Bool
   @State private var isKeyboardVisible = false
 
   var body: some View {
-    List {
-      Section {
-        composer
-      }
-      .listRowBackground(Color.clear)
-      // No insets: the card is as wide as the list sections below it.
-      .listRowInsets(EdgeInsets())
-
-      if let error = model.errorMessage {
-        Section {
-          Label(error, systemImage: "exclamationmark.triangle.fill")
-            .foregroundStyle(Color.danger)
-          if model.primaryAction == .estimate && !model.isEstimating {
-            Button("Try again") { runAI(model.estimate) }
+    GeometryReader { geometry in
+      let compact = geometry.size.height < 600
+      ScrollView {
+        VStack(alignment: .leading, spacing: 28) {
+          if let error = model.errorMessage {
+            Label(error, systemImage: "exclamationmark.triangle")
+              .foregroundStyle(Color.danger)
+              .font(.subheadline)
+              .accessibilityIdentifier("loggerError")
+          }
+          if isEntryVisible {
+            composer
+            provisionalSection
+          } else {
+            reviewContent(compact: compact)
           }
         }
+        .disabled(model.isSaving)
+        .frame(maxWidth: 600, alignment: .leading)
+        .padding(.horizontal, 24)
+        .padding(.top, isEntryVisible ? 24 : compact ? 20 : 40)
+        .padding(.bottom, compact ? 12 : 24)
+        .frame(maxWidth: .infinity)
       }
-
-      provisionalSection
-
-      if !model.state.items.isEmpty && !model.isEstimating {
-        reviewQuestionSection
-        reviewSections
-      }
-
-      quickAddSection
     }
-    .listSectionSpacing(.compact)
-    .contentMargins(.top, 8, for: .scrollContent)
+    .background(Color.surface)
     .scrollDismissesKeyboard(.interactively)
     .animation(
       reduceMotion ? .easeInOut(duration: 0.2) : .spring(duration: 0.4),
       value: model.state.items.map(\.id)
     )
-    .navigationTitle("Log meal")
+    .navigationTitle(isEntryVisible ? "Add meal" : "Review meal")
     .navigationSubtitle(model.date.label(today: appModel.today))
     .navigationBarTitleDisplayMode(.inline)
     .toolbar {
       ToolbarItem(placement: .cancellationAction) {
         Button("Close", systemImage: "xmark") { close() }
+          .disabled(model.isSaving)
+      }
+      if model.hasInput {
+        ToolbarItem(placement: .secondaryAction) {
+          Menu {
+            if !model.state.items.isEmpty {
+              Button("Edit description", systemImage: "square.and.pencil") {
+                isEditingSource = true
+              }
+            }
+            Button("Clear draft", systemImage: "trash", role: .destructive) {
+              isClearConfirmPresented = true
+            }
+          } label: {
+            Label("Meal actions", systemImage: "ellipsis")
+          }
+          .disabled(model.isEstimating || model.isSaving)
+        }
       }
     }
     .safeAreaInset(edge: .bottom) { bottomBar }
     .navigationDestination(isPresented: $isLibraryPresented) {
       LibraryPickerView { items, foodName, mealIds in
         model.addLibraryItems(items, foodName: foodName, mealIds: mealIds)
+        isEditingSource = false
+      }
+    }
+    .navigationDestination(for: LoggerDestination.self) { destination in
+      switch destination {
+      case .portion(let id):
+        LoggerPortionEditor(model: model, itemId: id)
+      case .food(let id):
+        LoggerFoodEditor(model: model, itemId: id, runAI: runAI)
+      case .nutrition:
+        LoggerNutritionDetails(model: model) {
+          isEditingSource = true
+        }
       }
     }
     .photosPicker(isPresented: $isPhotosPresented, selection: $photoItem, matching: .images)
@@ -134,6 +163,10 @@ private struct LoggerContent: View {
       if phase == .background { Task { await model.saveDraftNow() } }
     }
     .sensoryFeedback(.success, trigger: model.estimateCount)
+    .onChange(of: model.estimateCount) { _, _ in
+      isEditingSource = false
+      hideKeyboard()
+    }
     .task { await appModel.libraryStore.load() }
     .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification))
     {
@@ -145,10 +178,16 @@ private struct LoggerContent: View {
     }
   }
 
+  private var isEntryVisible: Bool {
+    model.state.items.isEmpty || model.isEstimating || model.primaryAction == .estimate
+      || isEditingSource
+  }
+
   @ViewBuilder
   private var provisionalSection: some View {
     if model.isEstimating && !model.provisionalItems.isEmpty {
-      Section {
+      VStack(alignment: .leading, spacing: 12) {
+        Text("Foods found").font(.headline)
         ForEach(Array(model.provisionalItems.enumerated()), id: \.offset) { _, item in
           LabeledContent(item.name) {
             Text("\(Macros.format(item.grams, maxFractionDigits: 0)) g")
@@ -156,55 +195,20 @@ private struct LoggerContent: View {
               .monospacedDigit()
           }
         }
-      } header: {
-        Text("Foods found")
-      } footer: {
         Text("Still checking nutrition…")
-      }
-    }
-
-  }
-
-  @ViewBuilder
-  private var reviewQuestionSection: some View {
-    if !model.isStale, let review = model.state.review, let item = model.reviewItem {
-      Section {
-        Text(review.question)
-        if review.kind == "portion" {
-          LabeledContent("Grams eaten") {
-            GramsField(
-              text: Binding(get: { item.gramsText }, set: { model.setGrams(item.id, $0) }),
-              onStep: { model.step(item.id, by: $0) },
-              onFocusLost: { model.gramsFocusLost(item.id) })
-          }
-          Button("Use this amount") { model.confirmReviewPortion() }
-            .disabled(LogItemMath.validGrams(item.gramsText) == nil)
-            .accessibilityIdentifier("confirmPortion")
-        } else {
-          TextField(
-            "Add a detail",
-            text: Binding(
-              get: { model.state.reviewAnswer ?? "" },
-              set: { model.state.reviewAnswer = $0 })
-          )
-          .accessibilityIdentifier("reviewAnswer")
-          Button("Update estimate") { runAI(model.answerReview) }
-            .disabled(
-              (model.state.reviewAnswer?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                ?? true))
-        }
-        Button("Keep estimate") { model.dismissReview() }
+          .font(.subheadline)
           .foregroundStyle(.secondary)
-      } header: {
-        Text("One detail to check")
       }
     }
+
   }
 
   // MARK: Composer
 
   private var composer: some View {
-    VStack(alignment: .leading, spacing: 12) {
+    VStack(alignment: .leading, spacing: 20) {
+      Text("What did you eat?")
+        .font(.title2.weight(.semibold))
       TextField(
         "What did you eat?", text: $model.state.text,
         prompt: Text(
@@ -216,6 +220,8 @@ private struct LoggerContent: View {
       .focused($isTextFocused)
       .disabled(model.isEstimating)
       .accessibilityIdentifier("mealText")
+      .padding(16)
+      .background(Color.canvas, in: .rect(cornerRadius: 12))
 
       attachments
 
@@ -239,84 +245,61 @@ private struct LoggerContent: View {
         .accessibilityElement(children: .combine)
       }
     }
-    .padding(12)
-    .background(Color.surface, in: .rect(cornerRadius: 20, style: .continuous))
-    .shimmerBorder(model.isEstimating)
     .animation(.smooth, value: model.isEstimating)
   }
 
-  /// Camera, Photos, and Scan label. Library items are in the "Add from library" section.
+  /// Entry tools stay quiet and are hidden after estimation.
   private var attachments: some View {
     ViewThatFits(in: .horizontal) {
-      HStack(spacing: 8) { attachmentButtons(compact: true) }
+      HStack(spacing: 20) { attachmentButtons }
       ScrollView(.horizontal, showsIndicators: false) {
-        HStack(spacing: 8) { attachmentButtons(compact: false) }
+        HStack(spacing: 20) { attachmentButtons }
       }
     }
     .disabled(model.isEstimating)
   }
 
   @ViewBuilder
-  private func attachmentButtons(compact: Bool) -> some View {
+  private var attachmentButtons: some View {
     if CameraPicker.isAvailable {
-      attachmentButton("Camera", systemImage: "camera", id: "attachCamera", compact: compact) {
+      entryButton("Camera", systemImage: "camera", id: "attachCamera") {
         isCameraPresented = true
       }
     }
-    attachmentButton(
-      "Photos", systemImage: "photo.on.rectangle", id: "attachPhotos", compact: compact
+    entryButton(
+      "Photos", systemImage: "photo.on.rectangle", id: "attachPhotos"
     ) {
       isPhotosPresented = true
     }
+    entryButton("Library", systemImage: "books.vertical", id: "attachLibrary") {
+      isLibraryPresented = true
+    }
     if DocumentScanner.isAvailable {
-      attachmentButton(
-        "Scan label", systemImage: "doc.text.viewfinder", id: "attachScan", compact: compact
-      ) {
-        runAI { isScannerPresented = true }
+      Menu {
+        Button("Scan label", systemImage: "doc.text.viewfinder") {
+          runAI { isScannerPresented = true }
+        }
+        .accessibilityIdentifier("attachScan")
+      } label: {
+        Label("More input options", systemImage: "ellipsis")
+          .labelStyle(.iconOnly)
+          .frame(minWidth: 44, minHeight: 44)
       }
     }
   }
 
-  private func attachmentButton(
-    _ title: LocalizedStringKey, systemImage: String, id: String, compact: Bool,
+  private func entryButton(
+    _ title: LocalizedStringKey, systemImage: String, id: String,
     action: @escaping () -> Void
   ) -> some View {
-    AttachmentButton(title: title, systemImage: systemImage, fills: compact, action: action)
-      .accessibilityIdentifier(id)
-  }
-
-  // MARK: Add from library
-
-  /// Recently used library items not yet in the meal. One tap adds an item.
-  @ViewBuilder
-  private var quickAddSection: some View {
-    let store = appModel.libraryStore
-    let addedFoods = Set(model.state.items.compactMap(\.linkedFoodId))
-    let foods = store.sortedFoods
-      .filter { !addedFoods.contains($0.id) && !model.state.usedMealIds.contains($0.id) }
-      .prefix(5)
-    if !store.foods.isEmpty && !model.isEstimating {
-      Section {
-        ForEach(foods) { food in
-          Button {
-            Task { await model.quickAdd(food) }
-          } label: {
-            QuickAddRow(food: food, isLoading: model.quickAddingId == food.id)
-          }
-          .buttonStyle(.plain)
-          .disabled(model.quickAddingId != nil)
-        }
-        Button {
-          isLibraryPresented = true
-        } label: {
-          Label("Search library", systemImage: "magnifyingglass")
-            .frame(minHeight: 44)
-        }
-        .accessibilityIdentifier("attachLibrary")
-      } header: {
-        Text("Add from library")
-      }
+    Button(action: action) {
+      Label(title, systemImage: systemImage)
+        .font(.subheadline)
+        .fixedSize(horizontal: true, vertical: false)
+        .frame(minHeight: 44)
     }
+    .buttonStyle(.borderless)
+    .accessibilityIdentifier(id)
   }
 
   private func photoPreview(_ image: UIImage) -> some View {
@@ -353,56 +336,51 @@ private struct LoggerContent: View {
 
   // MARK: Review
 
-  @ViewBuilder
-  private var reviewSections: some View {
-    Section {
+  private func reviewContent(compact: Bool) -> some View {
+    VStack(alignment: .leading, spacing: compact ? 12 : 28) {
       ForEach(Array(model.state.items.enumerated()), id: \.element.id) { index, item in
-        ItemCard(model: model, item: item, index: index)
-      }
-      .onDelete { offsets in
-        for offset in offsets { model.removeItem(model.state.items[offset].id) }
-      }
-    } header: {
-      Text("Review meal")
-    } footer: {
-      if model.hasAIItems {
-        Text("Estimated nutrition. Adjust quantities before logging.")
-      }
-    }
-
-    if model.showsLabelOverrides {
-      Section {
-        MacroFields(model: $labelFields)
-        Button("Apply") {
-          if let values = labelFields.values { model.applyLabelOverride(values) }
+        LoggerReviewItem(model: model, item: item, index: index, compact: compact)
+        if index < model.state.items.count - 1 {
+          Divider()
         }
-        .disabled(labelFields.values == nil)
-      } header: {
-        Text("Label values for this portion")
       }
-      .onAppear(perform: syncLabelFields)
-      .onChange(of: model.state.items) { syncLabelFields() }
-    }
-
-    Section {
-      let totals = model.totals
-      Text(
-        "Total: \(totals.calories, format: .number.precision(.fractionLength(0))) kcal · P \(totals.protein, format: .number.precision(.fractionLength(0)))g · C \(totals.carbs, format: .number.precision(.fractionLength(0)))g · F \(totals.fat, format: .number.precision(.fractionLength(0)))g"
-      )
-      .font(.subheadline.weight(.semibold))
-      .fontDesign(.rounded)
-      .monospacedDigit()
-      Toggle("Save this meal to Library", isOn: $model.state.saveToLibrary)
-      if model.state.saveToLibrary {
-        TextField("Meal name", text: $model.mealName)
+      if model.state.items.count == 1 {
+        Divider()
+        VStack(alignment: .leading, spacing: 8) {
+          Text(model.hasAIItems ? "Estimated total" : "Meal total")
+            .font(.subheadline)
+            .foregroundStyle(Color.ink.opacity(0.7))
+          KcalText(value: model.totals.calories)
+            .font(compact ? .title.weight(.semibold) : .largeTitle.weight(.semibold))
+            .accessibilityIdentifier("reviewTotal")
+        }
       }
-      Button("Clear draft", role: .destructive) { isClearConfirmPresented = true }
-    }
-  }
-
-  private func syncLabelFields() {
-    if let display = model.labelDisplayMacros {
-      labelFields = MacroFieldsModel(values: display.rounded)
+      VStack(spacing: 0) {
+        Divider()
+        NavigationLink(value: LoggerDestination.nutrition) {
+          HStack(spacing: 12) {
+            Text("Nutrition & estimate details")
+              .foregroundStyle(.primary)
+            Spacer(minLength: 0)
+            Image(systemName: "chevron.right")
+              .font(.subheadline.weight(.semibold))
+              .foregroundStyle(.secondary)
+          }
+          .frame(minHeight: compact ? 44 : 56)
+          .padding(.vertical, compact ? 0 : 4)
+          .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("nutritionDetails")
+        Divider()
+      }
+      Button {
+        isEditingSource = true
+      } label: {
+        Label("Add food", systemImage: "plus")
+          .frame(minHeight: 44)
+      }
+      .accessibilityIdentifier("addFood")
     }
   }
 
@@ -410,11 +388,28 @@ private struct LoggerContent: View {
 
   private var bottomBar: some View {
     VStack(spacing: 8) {
+      if !isEntryVisible && model.state.items.count > 1 {
+        HStack {
+          Text(model.hasAIItems ? "Estimated total" : "Meal total")
+            .foregroundStyle(.secondary)
+          Spacer()
+          KcalText(value: model.totals.calories).font(.headline)
+        }
+        .accessibilityIdentifier("reviewTotal")
+      }
       if model.isStale {
         Text("Your photo or description changed. Update the estimate before logging.")
           .font(.footnote)
           .foregroundStyle(.secondary)
           .multilineTextAlignment(.center)
+      }
+      if model.canRestorePreviousEstimate {
+        Button("Use previous estimate") {
+          model.restorePreviousEstimate()
+          isEditingSource = false
+        }
+        .frame(minHeight: 44)
+        .accessibilityIdentifier("restoreEstimate")
       }
       // The keyboard button sits in this row, not in a keyboard toolbar, so the two never overlap.
       HStack(spacing: 8) {
@@ -422,24 +417,22 @@ private struct LoggerContent: View {
           Group {
             if model.isSaving {
               ProgressView()
-            } else if model.primaryAction == .estimate {
+            } else if model.isEstimating {
+              ProgressView()
+            } else if model.primaryAction == .estimate || model.state.items.isEmpty {
               Label("Estimate nutrition", systemImage: "sparkles")
+            } else if isEntryVisible {
+              Text("Review meal")
             } else {
-              // Short label when the full one does not fit on one line (large text).
-              ViewThatFits(in: .horizontal) {
-                Text(
-                  "Log meal · \(model.totals.calories, format: .number.precision(.fractionLength(0))) kcal"
-                )
-                .monospacedDigit()
-                .fixedSize()
-                Text("Log meal").fixedSize()
-              }
+              Text("Log meal")
             }
           }
           .font(.headline)
+          .foregroundStyle(colorScheme == .dark ? Color.black : Color.white)
           .frame(maxWidth: .infinity, minHeight: 36)
         }
-        .buttonStyle(.glassProminent)
+        .buttonStyle(.borderedProminent)
+        .buttonBorderShape(.capsule)
         .controlSize(.large)
         .disabled(isPrimaryDisabled)
         .accessibilityIdentifier("loggerPrimary")
@@ -456,20 +449,29 @@ private struct LoggerContent: View {
       }
       .animation(.smooth(duration: 0.2), value: isKeyboardVisible)
     }
-    .padding(.horizontal)
-    .padding(.vertical, 8)
+    .frame(maxWidth: 600)
+    .padding(.horizontal, 24)
+    .padding(.vertical, 12)
+    .frame(maxWidth: .infinity)
+    .background(Color.surface)
   }
 
   private var isPrimaryDisabled: Bool {
     if model.isEstimating || model.isSaving { return true }
-    if model.primaryAction == .estimate { return false }
-    return model.state.items.isEmpty
+    if model.primaryAction == .estimate || model.state.items.isEmpty {
+      return !model.fingerprint.hasInput
+    }
+    return AnalyzeGate.logBlockReason(model.state.items) != nil
   }
 
   private func primary() {
     hideKeyboard()
-    if model.primaryAction == .estimate {
+    if model.primaryAction == .estimate || model.state.items.isEmpty {
       runAI(model.estimate)
+      return
+    }
+    if isEntryVisible {
+      isEditingSource = false
       return
     }
     Task {
@@ -509,106 +511,5 @@ private struct LoggerContent: View {
     isTextFocused = false
     UIApplication.shared.sendAction(
       #selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-  }
-}
-
-/// A library item with an add button: "Greek yogurt" / "Per 100g · 59 kcal".
-private struct QuickAddRow: View {
-  var food: SavedFood
-  var isLoading: Bool
-
-  var body: some View {
-    HStack(spacing: 12) {
-      VStack(alignment: .leading, spacing: 2) {
-        Text(food.name).lineLimit(2)
-        Text(LibraryFilter.subtitle(food))
-          .font(.subheadline)
-          .foregroundStyle(.secondary)
-          .monospacedDigit()
-      }
-      Spacer()
-      if isLoading {
-        ProgressView()
-      } else {
-        Image(systemName: "plus.circle.fill")
-          .font(.title2)
-          .foregroundStyle(Color.brandPrimary)
-      }
-    }
-    .frame(minHeight: 44)
-    .contentShape(.rect)
-    .accessibilityElement(children: .combine)
-    .accessibilityLabel("Add \(food.name)")
-    .accessibilityValue(LibraryFilter.subtitle(food))
-  }
-}
-
-/// One item: name, grams with stepper, live macros, and remove.
-private struct ItemCard: View {
-  var model: LoggerModel
-  var item: LogItem
-  var index: Int
-  @Environment(\.accessibilityReduceMotion) private var reduceMotion
-  @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-  @State private var isVisible = false
-
-  var body: some View {
-    let macros = LogItemMath.macros(item)
-    VStack(alignment: .leading, spacing: 6) {
-      HStack(alignment: .firstTextBaseline) {
-        Text(item.name).font(.body.weight(.medium))
-        Spacer()
-        KcalText(value: macros.calories).font(.subheadline.weight(.semibold))
-        Button {
-          model.removeItem(item.id)
-        } label: {
-          Image(systemName: "xmark")
-            .frame(width: 44, height: 44)
-            .contentShape(.rect)
-        }
-        .buttonStyle(.borderless)
-        .foregroundStyle(.secondary)
-        .accessibilityLabel("Remove \(item.name)")
-      }
-      let macroLine = MacroLine(macros: macros)
-        .font(.caption)
-        .foregroundStyle(.secondary)
-      let grams = GramsField(
-        text: Binding(get: { item.gramsText }, set: { model.setGrams(item.id, $0) }),
-        onStep: { model.step(item.id, by: $0) },
-        onFocusLost: { model.gramsFocusLost(item.id) })
-      if dynamicTypeSize.isAccessibilitySize {
-        macroLine
-        grams
-      } else {
-        HStack {
-          macroLine
-          Spacer()
-          grams
-        }
-      }
-      if item.origin == .ai && !item.aiNotes.isEmpty {
-        DisclosureGroup("Estimate details") {
-          Text(item.aiNotes)
-            .font(.footnote)
-            .foregroundStyle(.secondary)
-        }
-        .font(.footnote)
-        .accessibilityIdentifier("estimateDetails\(index)")
-      }
-      if item.isNutritionMissing {
-        Text("Nutrition is missing. Remove this item to log the rest of your meal.")
-          .font(.footnote)
-          .foregroundStyle(Color.danger)
-      }
-    }
-    .opacity(isVisible ? 1 : 0)
-    .offset(y: isVisible || reduceMotion ? 0 : 12)
-    .onAppear {
-      withAnimation(
-        reduceMotion
-          ? .easeInOut(duration: 0.2) : .spring(duration: 0.4).delay(Double(index) * 0.05)
-      ) { isVisible = true }
-    }
   }
 }

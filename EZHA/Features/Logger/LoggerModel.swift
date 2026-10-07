@@ -27,6 +27,8 @@ struct LoggerState: Codable, Equatable {
   var review: Estimate.Review?
   var reviewItemId: UUID?
   var reviewAnswer: String?
+  /// A clarification's prior draft, retained across relaunch until the new estimate succeeds.
+  var clarificationBaseline: Data?
 
   var isEmpty: Bool { self == LoggerState(entryId: entryId) }
 }
@@ -65,6 +67,8 @@ final class LoggerModel {
   /// Incremented after each estimate, for the item insert animation and haptics.
   private(set) var estimateCount = 0
   private(set) var provisionalItems: [Estimate.Item] = []
+  /// Retained while a clarification is being estimated, so a failed request is reversible.
+  private var previousEstimate: LoggerState?
 
   let date: DateKey
   @ObservationIgnored private let appModel: AppModel
@@ -101,6 +105,11 @@ final class LoggerModel {
   var totals: MacroTotals { LogItemMath.totals(state.items) }
   var hasAIItems: Bool { state.items.contains { $0.origin == .ai } }
   var showsLabelOverrides: Bool { state.aiItemsFromLabel && hasAIItems }
+  var canRestorePreviousEstimate: Bool {
+    guard let previousEstimate else { return false }
+    return !isEstimating && !isSaving && previousEstimate.photoId == state.photoId
+      && previousEstimate.isLabel == state.isLabel
+  }
 
   var suggestedMealName: String {
     LibraryDrafts.suggestedName(
@@ -127,6 +136,9 @@ final class LoggerModel {
     {
       state = saved
       imageData = draft.imageData
+      previousEstimate = saved.clarificationBaseline.flatMap {
+        try? JSONDecoder.ezha.decode(LoggerState.self, from: $0)
+      }
     }
     if let prefill = appModel.loggerPrefill {
       appModel.loggerPrefill = nil
@@ -175,6 +187,7 @@ final class LoggerModel {
     attachmentId = UUID()
     isRestoring = true
     state = LoggerState()
+    previousEstimate = nil
     imageData = nil
     errorMessage = nil
     isRestoring = false
@@ -337,6 +350,8 @@ final class LoggerModel {
     state.aiFoodName = estimate.foodName
     for item in newItems { state.lastValidByItem[item.id] = item.gramsText }
     estimateCount += 1
+    previousEstimate = nil
+    state.clarificationBaseline = nil
   }
 
   func cancelEstimate() {
@@ -373,9 +388,29 @@ final class LoggerModel {
     else {
       return
     }
-    state.text += "\n\(review.question) \(answer)"
+    guard let itemId = state.reviewItemId else { return }
+    refineItem(itemId, detail: "\(review.question) \(answer)")
+  }
+
+  /// Corrections retain the current portion as context and replace only AI items on success.
+  func refineItem(_ id: UUID, detail: String) {
+    guard !isEstimating, !isSaving, !isStale,
+      !detail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+      let item = state.items.first(where: { $0.id == id }), item.origin == .ai
+    else { return }
+    previousEstimate = state
+    state.clarificationBaseline = try? JSONEncoder.ezha.encode(state)
+    state.text +=
+      "\n\(item.name): \(item.gramsText) g eaten. \(detail.trimmingCharacters(in: .whitespacesAndNewlines))"
     dismissReview()
     estimate()
+  }
+
+  func restorePreviousEstimate() {
+    guard canRestorePreviousEstimate, let previousEstimate else { return }
+    state = previousEstimate
+    self.previousEstimate = nil
+    errorMessage = nil
   }
 
   func dismissReview() {
@@ -444,6 +479,26 @@ final class LoggerModel {
     }
   }
 
+  /// Commits an editor's valid weight and preserves confirmed AI quantities for later corrections.
+  @discardableResult
+  func updatePortion(_ id: UUID, grams text: String) -> Bool {
+    guard !isEstimating, !isSaving, let grams = parseNumberInput(text), grams.isFinite,
+      grams > 0, grams <= LogItemMath.maxGrams,
+      let item = state.items.first(where: { $0.id == id })
+    else { return false }
+    let wasStale = isStale
+    setGrams(id, Macros.format(grams, maxFractionDigits: 1))
+    if state.reviewItemId == id && state.review?.kind == "portion" {
+      confirmReviewPortion()
+    } else if item.origin == .ai && !wasStale {
+      state.text +=
+        "\n\(item.name): \(state.items.first { $0.id == id }?.gramsText ?? text) g eaten."
+      state.lastAnalyzed = fingerprint
+      state.estimateUsedText = true
+    }
+    return true
+  }
+
   /// Returns true when the step reached 5000 g.
   @discardableResult
   func step(_ id: UUID, by delta: Double) -> Bool {
@@ -484,6 +539,11 @@ final class LoggerModel {
 
   /// Logs the meal. Returns true when the sheet should close.
   func log() async -> Bool {
+    guard !isSaving, !isEstimating else { return false }
+    guard primaryAction != .estimate else {
+      errorMessage = AnalyzeGate.staleMessage
+      return false
+    }
     if let reason = AnalyzeGate.logBlockReason(state.items) {
       errorMessage = reason
       return false
@@ -517,8 +577,29 @@ final class LoggerModel {
             String(localized: "The library copy could not be saved. Your meal log is kept."))
         }
       }
+      let libraryIngredients = LogItemMath.mealIngredients(from: state.items)
+      let libraryName = mealName.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty ?? "Meal"
+      let alreadySavedToLibrary = state.saveToLibrary
       await clearDraft()
-      appModel.showToast(notices.joined(separator: " "))
+      if alreadySavedToLibrary {
+        appModel.showToast(notices.joined(separator: " "))
+      } else {
+        appModel.showToast(
+          notices.joined(separator: " "), actionTitle: String(localized: "Save to Library")
+        ) { [weak appModel] in
+          guard let appModel else { return }
+          Task {
+            do {
+              try await appModel.libraryStore.saveMeal(
+                id: nil, name: libraryName, ingredients: libraryIngredients)
+              appModel.showToast(String(localized: "Meal saved to Library."))
+            } catch {
+              appModel.showToast(
+                String(localized: "The library copy could not be saved. Your meal log is kept."))
+            }
+          }
+        }
+      }
       return true
     } catch {
       errorMessage = error.localizedDescription
