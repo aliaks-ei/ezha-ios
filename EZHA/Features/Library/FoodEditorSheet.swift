@@ -364,7 +364,7 @@ final class PhotoFoodModel {
 
   func attach(_ raw: Data, isLabel: Bool) async {
     do {
-      imageData = try await ImageProcessing.jpeg(from: raw)
+      imageData = try await ImageProcessing.jpeg(from: raw, forLabel: isLabel || self.isLabel)
       uploadedPath = nil
       estimate = nil
       if isLabel { self.isLabel = true }
@@ -391,6 +391,10 @@ final class PhotoFoodModel {
         if case .result(let value) = event { result = value }
       }
       guard let result else { throw AIError.message("Analysis returned an invalid response.") }
+      if isLabel && result.nutritionBasis != .per100g {
+        throw AIError.message(
+          "Label analysis needs the updated backend. Enter values per 100 g manually.")
+      }
       estimate = result
       if name.isEmpty { name = result.foodName ?? "" }
       // Labels are per 100 g. Display them for the grams eaten when given.

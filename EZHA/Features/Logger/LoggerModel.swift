@@ -24,6 +24,9 @@ struct LoggerState: Codable, Equatable {
   var usedMealIds: [UUID] = []
   var lastValidByItem: [UUID: String] = [:]
   var lastValidByFood: [UUID: String] = [:]
+  var review: Estimate.Review?
+  var reviewItemId: UUID?
+  var reviewAnswer: String?
 
   var isEmpty: Bool { self == LoggerState(entryId: entryId) }
 }
@@ -35,12 +38,14 @@ final class LoggerModel {
   enum Stage: Equatable {
     case uploading
     case reading
+    case checking
     case finalizing
 
     var text: String {
       switch self {
       case .uploading: String(localized: "Uploading photo…")
       case .reading: String(localized: "Reading your meal…")
+      case .checking: String(localized: "Checking details…")
       case .finalizing: String(localized: "Finalizing…")
       }
     }
@@ -59,10 +64,14 @@ final class LoggerModel {
   private(set) var quickAddingId: UUID?
   /// Incremented after each estimate, for the item insert animation and haptics.
   private(set) var estimateCount = 0
+  private(set) var provisionalItems: [Estimate.Item] = []
 
   let date: DateKey
   @ObservationIgnored private let appModel: AppModel
   @ObservationIgnored private var estimateTask: Task<Void, Never>?
+  @ObservationIgnored private var uploadTask: Task<String, any Error>?
+  @ObservationIgnored private var attachmentId = UUID()
+  @ObservationIgnored private var estimateId = UUID()
   @ObservationIgnored private var draftTask: Task<Void, Never>?
   @ObservationIgnored private var firstUnsavedChange: Date?
   @ObservationIgnored private var isRestoring = true
@@ -161,6 +170,9 @@ final class LoggerModel {
 
   func clearDraft() async {
     cancelEstimate()
+    uploadTask?.cancel()
+    uploadTask = nil
+    attachmentId = UUID()
     isRestoring = true
     state = LoggerState()
     imageData = nil
@@ -174,20 +186,45 @@ final class LoggerModel {
   // MARK: Photo
 
   func attachPhoto(_ raw: Data, isLabel: Bool) async {
+    uploadTask?.cancel()
+    uploadTask = nil
+    let attachment = UUID()
+    attachmentId = attachment
     do {
-      let jpeg = try await ImageProcessing.jpeg(from: raw)
+      let jpeg = try await ImageProcessing.jpeg(from: raw, forLabel: isLabel || state.isLabel)
+      guard attachmentId == attachment else { return }
       imageData = jpeg
       state.photoId = UUID().uuidString
       state.pendingImagePath = nil
       state.entryId = UUID()
       if isLabel { state.isLabel = true }
       errorMessage = nil
+      // Once consent is given, storage upload can overlap with entering the description.
+      if appModel.isAIConsentGiven {
+        let entryId = state.entryId
+        let photoId = state.photoId
+        uploadTask = Task { [weak self] in
+          guard let self else { throw CancellationError() }
+          do {
+            let path = try await uploadPhoto(jpeg, entryId: entryId)
+            try Task.checkCancellation()
+            if state.photoId == photoId { state.pendingImagePath = path }
+            return path
+          } catch {
+            if state.photoId == photoId { uploadTask = nil }
+            throw error
+          }
+        }
+      }
     } catch {
-      errorMessage = error.localizedDescription
+      if attachmentId == attachment { errorMessage = error.localizedDescription }
     }
   }
 
   func removePhoto() {
+    attachmentId = UUID()
+    uploadTask?.cancel()
+    uploadTask = nil
     imageData = nil
     state.photoId = nil
     state.pendingImagePath = nil
@@ -200,6 +237,9 @@ final class LoggerModel {
   func estimate() {
     guard fingerprint.hasInput, !isEstimating else { return }
     errorMessage = nil
+    provisionalItems = []
+    let currentEstimateId = UUID()
+    estimateId = currentEstimateId
     let fingerprint = fingerprint
     let isLabel = state.isLabel
     let labelGrams = parseNumberInput(state.labelGramsText)
@@ -215,22 +255,31 @@ final class LoggerModel {
           errorMessage = Self.message(for: error)
         }
       }
-      stage = nil
+      if estimateId == currentEstimateId {
+        stage = nil
+        provisionalItems = []
+      }
     }
   }
 
   private func runEstimate(isLabel: Bool) async throws -> Estimate {
+    try Task.checkCancellation()
     let clients = appModel.clients
     var imagePath = state.pendingImagePath
     if let imageData, imagePath == nil {
       stage = .uploading
       do {
-        imagePath = try await clients.logging.uploadImage(imageData, state.entryId)
-      } catch  where "\(error)".localizedCaseInsensitiveContains("already exists") {
-        // A previous attempt uploaded the same file before it could record the path.
-        let userId = appModel.user?.id.uuidString.lowercased() ?? ""
-        imagePath = "\(userId)/\(state.entryId.uuidString.lowercased()).jpg"
+        if let uploadTask {
+          imagePath = try await uploadTask.value
+        } else {
+          imagePath = try await uploadPhoto(imageData, entryId: state.entryId)
+        }
+      } catch {
+        try Task.checkCancellation()
+        // A failed background upload is retried once when the user requests analysis.
+        imagePath = try await uploadPhoto(imageData, entryId: state.entryId)
       }
+      try Task.checkCancellation()
       state.pendingImagePath = imagePath
     }
     stage = .reading
@@ -239,14 +288,33 @@ final class LoggerModel {
       inputType: EntryPayload.analyzeInputType(hasPhoto: imageData != nil, isLabelPhoto: isLabel))
     var result: Estimate?
     for try await event in clients.ai.estimateStream(request) {
+      try Task.checkCancellation()
       switch event {
-      case .status(let value): stage = value == "finalizing" ? .finalizing : .reading
+      case .status(let value):
+        stage =
+          value == "finalizing" ? .finalizing : value == "checking_details" ? .checking : .reading
       case .result(let estimate): result = estimate
+      case .item(let index, let item):
+        if index == provisionalItems.count { provisionalItems.append(item) }
+      case .reset: provisionalItems = []
       case .delta, .uploading: break
       }
     }
     guard let result else { throw AIError.message("Analysis returned an invalid response.") }
+    if isLabel && result.nutritionBasis != .per100g {
+      throw AIError.message(
+        "Label analysis needs the updated backend. Enter values per 100 g manually.")
+    }
     return result
+  }
+
+  private func uploadPhoto(_ data: Data, entryId: UUID) async throws -> String {
+    do {
+      return try await appModel.clients.logging.uploadImage(data, entryId)
+    } catch  where "\(error)".localizedCaseInsensitiveContains("already exists") {
+      let userId = appModel.user?.id.uuidString.lowercased() ?? ""
+      return "\(userId)/\(entryId.uuidString.lowercased()).jpg"
+    }
   }
 
   private func apply(
@@ -257,6 +325,11 @@ final class LoggerModel {
       ? LogItemMath.fromLabelEstimate(estimate, grams: labelGrams)
       : LogItemMath.fromEstimate(estimate)
     state.items = LogItemMath.replacingAIItems(in: state.items, with: newItems)
+    state.review = estimate.review
+    state.reviewItemId = estimate.review.flatMap {
+      newItems.indices.contains($0.itemIndex) ? newItems[$0.itemIndex].id : nil
+    }
+    state.reviewAnswer = nil
     state.lastAnalyzed = fingerprint
     state.estimateUsedPhoto = fingerprint.photoId != nil
     state.estimateUsedText = !fingerprint.text.isEmpty
@@ -267,9 +340,48 @@ final class LoggerModel {
   }
 
   func cancelEstimate() {
+    estimateId = UUID()
     estimateTask?.cancel()
     estimateTask = nil
     stage = nil
+    provisionalItems = []
+  }
+
+  var reviewItem: LogItem? {
+    state.items.first { $0.id == state.reviewItemId }
+  }
+
+  func confirmReviewPortion() {
+    guard !isStale, let id = state.reviewItemId,
+      let index = state.items.firstIndex(where: { $0.id == id }),
+      LogItemMath.validGrams(state.items[index].gramsText) != nil
+    else { return }
+    state.items[index].aiNotes = state.items[index].aiNotes.replacingOccurrences(
+      of: "Portion weight estimated.", with: "Portion weight confirmed by user.")
+    // Keep the confirmed weight as context for a later ingredient/identity correction.
+    let item = state.items[index]
+    state.text += "\n\(item.name): \(item.gramsText) g eaten."
+    state.lastAnalyzed = fingerprint
+    state.estimateUsedText = true
+    dismissReview()
+  }
+
+  func answerReview() {
+    guard let review = state.review,
+      let answer = state.reviewAnswer?.trimmingCharacters(in: .whitespacesAndNewlines),
+      !answer.isEmpty
+    else {
+      return
+    }
+    state.text += "\n\(review.question) \(answer)"
+    dismissReview()
+    estimate()
+  }
+
+  func dismissReview() {
+    state.review = nil
+    state.reviewItemId = nil
+    state.reviewAnswer = nil
   }
 
   static func message(for error: any Error) -> String {
@@ -318,6 +430,7 @@ final class LoggerModel {
 
   func removeItem(_ id: UUID) {
     state.items.removeAll { $0.id == id }
+    if state.reviewItemId == id { dismissReview() }
   }
 
   func setGrams(_ id: UUID, _ text: String) {

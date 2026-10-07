@@ -146,3 +146,26 @@ Checks to tap through on the iPhone:
 - The PWA was not run against the new backend. Its own summary sync still upserts after the new trigger, which should be harmless, but a quick PWA smoke test before retiring it is worth doing.
 - The remote test user `ezha-ios-test@example.com` now has test entries, an "E2E Oats" food, and an "E2E Cut" target from the end-to-end run.
 - Local tooling left running: Colima and the local Supabase stack (`supabase stop`, `colima stop` to free resources).
+
+
+## Meal detection v2 — local verification (2026-10-07)
+
+- Default model: `gpt-6-luna` (meals: low reasoning; labels: none). Selective image/OCR fallback: `gpt-6.1-sol` (low). Existing hosted `OPENAI_API_KEY` is reused; no hosted secrets or functions changed.
+- Separate strict meal/label schemas; label nutrition normalizes to an explicit per-100-g basis and scales once in iOS. Printed energy is preserved. Volume/serving labels without a printed gram conversion require manual entry.
+- Grounded nutrition: user library under existing RLS plus 42 sourced USDA SR Legacy foods. Unmatched foods remain disclosed model estimates. One optional review question; portion confirmation recalculates locally.
+- Parallel preparation, consent-aware early image upload, provisional streamed items, cancellation/deadline handling, and per-attempt latency/token telemetry. Provisional results cannot be logged.
+- Backend: Deno type check and formatting passed; 16/16 tests passed, including label scaling, nutrient grounding, refusal/incomplete streams, fallback and cancellation. Catalog archive hash and 42 unique source IDs verified.
+- iOS: build and 65/65 tests passed on iPhone 17 Pro Simulator (iOS 26.4). Three isolated simulator checks passed for portion recalculation, reviewed-item removal/library preservation, and native layout captures.
+- Light, dark and accessibility3 text-size captures inspected using mocked meal data. Evidence: `.local/ai-verification/` (screenshots, isolated test source, build logs). This is simulator evidence; physical-device and live-model validation remain outstanding.
+- No live recognition-accuracy, p50/p95 latency or cost benchmark was run. Deploy the backend before distributing the new iOS client because label parsing now requires the explicit nutrition basis.
+- Implementation/configuration/source details: `supabase/functions/ai-estimate/README.md`. No commit, push or deployment performed.
+
+
+## Meal detection deployment and physical iPhone build (2026-10-07)
+
+- User authorized deployment and command-line build/install to the connected iPhone.
+- Deployed `ai-estimate` version 31 to EZHA project `eixwgqtyeaehczasvjup`; remote status ACTIVE. Entrypoint, service, core and JSON catalog are included. Existing secrets and JWT configuration preserved. Previous version 30 downloaded to `.local/ai-verification/ai-estimate-before-deploy.json` as a rollback copy.
+- Live streamed text request succeeded (HTTP 200, 5.48 s client elapsed) for 150 g roasted chicken and 180 g cooked rice. Both items matched USDA sources, explicit gram amounts were preserved, preview and final events completed, and item calories sum to the returned 481.5 kcal. This one text request is a deployment smoke check, not an image accuracy or latency benchmark. The log query returned no records in the selected window.
+- Device build succeeded via `xcodebuild` without opening Xcode. Installed and launched `com.aliaksei.ezha` (1.0, build 1) on Aliaksei's iPhone 16 Pro using `devicectl`.
+- Used existing `EZHA/EZHA-Dev.entitlements` for Personal Team signing. This development build excludes Sign in with Apple; camera/meal interaction on the physical device was not automated.
+- Evidence: `.local/ai-verification/deployed-smoke.json`, `iphone-build.log`, `iphone-install.json`, and `iphone-launch.json`. No commit or push performed.

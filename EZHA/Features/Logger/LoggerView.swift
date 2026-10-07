@@ -66,7 +66,10 @@ private struct LoggerContent: View {
         }
       }
 
-      if !model.state.items.isEmpty {
+      provisionalSection
+
+      if !model.state.items.isEmpty && !model.isEstimating {
+        reviewQuestionSection
         reviewSections
       }
 
@@ -139,6 +142,62 @@ private struct LoggerContent: View {
     .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification))
     {
       _ in isKeyboardVisible = false
+    }
+  }
+
+  @ViewBuilder
+  private var provisionalSection: some View {
+    if model.isEstimating && !model.provisionalItems.isEmpty {
+      Section {
+        ForEach(Array(model.provisionalItems.enumerated()), id: \.offset) { _, item in
+          LabeledContent(item.name) {
+            Text("\(Macros.format(item.grams, maxFractionDigits: 0)) g")
+              .foregroundStyle(.secondary)
+              .monospacedDigit()
+          }
+        }
+      } header: {
+        Text("Foods found")
+      } footer: {
+        Text("Still checking nutrition…")
+      }
+    }
+
+  }
+
+  @ViewBuilder
+  private var reviewQuestionSection: some View {
+    if !model.isStale, let review = model.state.review, let item = model.reviewItem {
+      Section {
+        Text(review.question)
+        if review.kind == "portion" {
+          LabeledContent("Grams eaten") {
+            GramsField(
+              text: Binding(get: { item.gramsText }, set: { model.setGrams(item.id, $0) }),
+              onStep: { model.step(item.id, by: $0) },
+              onFocusLost: { model.gramsFocusLost(item.id) })
+          }
+          Button("Use this amount") { model.confirmReviewPortion() }
+            .disabled(LogItemMath.validGrams(item.gramsText) == nil)
+            .accessibilityIdentifier("confirmPortion")
+        } else {
+          TextField(
+            "Add a detail",
+            text: Binding(
+              get: { model.state.reviewAnswer ?? "" },
+              set: { model.state.reviewAnswer = $0 })
+          )
+          .accessibilityIdentifier("reviewAnswer")
+          Button("Update estimate") { runAI(model.answerReview) }
+            .disabled(
+              (model.state.reviewAnswer?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                ?? true))
+        }
+        Button("Keep estimate") { model.dismissReview() }
+          .foregroundStyle(.secondary)
+      } header: {
+        Text("One detail to check")
+      }
     }
   }
 
@@ -527,6 +586,15 @@ private struct ItemCard: View {
           Spacer()
           grams
         }
+      }
+      if item.origin == .ai && !item.aiNotes.isEmpty {
+        DisclosureGroup("Estimate details") {
+          Text(item.aiNotes)
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+        }
+        .font(.footnote)
+        .accessibilityIdentifier("estimateDetails\(index)")
       }
       if item.isNutritionMissing {
         Text("Nutrition is missing. Remove this item to log the rest of your meal.")

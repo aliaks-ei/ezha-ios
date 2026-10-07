@@ -2,6 +2,28 @@ import Foundation
 
 /// An `ai-estimate` result. Port of `toEstimate` in `src/services/ai-analysis-service.ts`.
 public struct Estimate: Codable, Sendable, Hashable {
+  public enum NutritionBasis: String, Codable, Sendable {
+    case per100g = "per_100g"
+    case perPortion = "per_portion"
+  }
+
+  public struct Review: Codable, Sendable, Hashable {
+    public var question: String
+    public var kind: String
+    public var itemIndex: Int
+
+    public init(question: String, kind: String, itemIndex: Int) {
+      self.question = question
+      self.kind = kind
+      self.itemIndex = itemIndex
+    }
+
+    enum CodingKeys: String, CodingKey {
+      case question, kind
+      case itemIndex = "item_index"
+    }
+  }
+
   public struct Item: Codable, Sendable, Hashable {
     public var name: String
     public var grams: Double
@@ -11,10 +33,14 @@ public struct Estimate: Codable, Sendable, Hashable {
     public var fat: Double
     public var confidence: Double?
     public var notes: String?
+    public var nutritionSource: String?
+    public var nutritionSourceId: String?
+    public var portionEstimated: Bool?
 
     public init(
       name: String, grams: Double, macros: MacroTotals, confidence: Double? = nil,
-      notes: String? = nil
+      notes: String? = nil, nutritionSource: String? = nil, nutritionSourceId: String? = nil,
+      portionEstimated: Bool? = nil
     ) {
       self.name = name
       self.grams = grams
@@ -24,10 +50,20 @@ public struct Estimate: Codable, Sendable, Hashable {
       self.fat = macros.fat
       self.confidence = confidence
       self.notes = notes
+      self.nutritionSource = nutritionSource
+      self.nutritionSourceId = nutritionSourceId
+      self.portionEstimated = portionEstimated
     }
 
     public var macros: MacroTotals {
       MacroTotals(calories: calories, protein: protein, carbs: carbs, fat: fat)
+    }
+
+    enum CodingKeys: String, CodingKey {
+      case name, grams, calories, protein, carbs, fat, confidence, notes
+      case nutritionSource = "nutrition_source"
+      case nutritionSourceId = "nutrition_source_id"
+      case portionEstimated = "portion_estimated"
     }
   }
 
@@ -37,10 +73,13 @@ public struct Estimate: Codable, Sendable, Hashable {
   public var foodName: String?
   public var notes: String
   public var items: [Item]
+  public var nutritionBasis: NutritionBasis?
+  public var review: Review?
 
   public init(
     totals: MacroTotals, confidence: Double? = nil, source: String, foodName: String? = nil,
-    notes: String = "", items: [Item] = []
+    notes: String = "", items: [Item] = [], nutritionBasis: NutritionBasis? = nil,
+    review: Review? = nil
   ) {
     self.totals = totals
     self.confidence = confidence
@@ -48,6 +87,8 @@ public struct Estimate: Codable, Sendable, Hashable {
     self.foodName = foodName
     self.notes = notes
     self.items = items
+    self.nutritionBasis = nutritionBasis
+    self.review = review
   }
 
   /// Parses the JSON body. An `error` field fails even with HTTP 200.
@@ -69,9 +110,32 @@ public struct Estimate: Codable, Sendable, Hashable {
     guard let totals, let source = raw.source, !source.isEmpty, let notes = raw.notes else {
       throw AIError.message("Analysis returned an invalid response.")
     }
+    let values = [totals.calories, totals.protein, totals.carbs, totals.fat]
+    guard values.allSatisfy({ $0.isFinite && $0 >= 0 }) else {
+      throw AIError.message("Analysis returned invalid nutrition values.")
+    }
+    if raw.nutritionBasis != nil && (raw.items?.isEmpty ?? true) {
+      throw AIError.message("Analysis returned no food items.")
+    }
+    if source == "label_photo" && raw.nutritionBasis != .per100g {
+      throw AIError.message(
+        "Label analysis needs the updated backend. Enter values per 100 g manually.")
+    }
+    for item in raw.items ?? [] {
+      guard !item.name.trimmed.isEmpty, item.grams.isFinite, item.grams > 0,
+        item.grams <= LogItemMath.maxGrams,
+        [item.calories, item.protein, item.carbs, item.fat].allSatisfy({ $0.isFinite && $0 >= 0 })
+      else { throw AIError.message("Analysis returned invalid food items.") }
+    }
+    if let review = raw.review {
+      guard ["portion", "ingredient", "identity"].contains(review.kind),
+        !review.question.trimmed.isEmpty, review.itemIndex >= 0,
+        review.itemIndex < (raw.items?.count ?? 0)
+      else { throw AIError.message("Analysis returned an invalid review question.") }
+    }
     return Estimate(
       totals: totals, confidence: raw.confidence, source: source, foodName: raw.foodName,
-      notes: notes, items: raw.items ?? [])
+      notes: notes, items: raw.items ?? [], nutritionBasis: raw.nutritionBasis, review: raw.review)
   }
 
   private struct RawEstimate: Decodable {
@@ -86,10 +150,14 @@ public struct Estimate: Codable, Sendable, Hashable {
     var notes: String?
     var items: [Item]?
     var error: String?
+    var nutritionBasis: NutritionBasis?
+    var review: Review?
 
     enum CodingKeys: String, CodingKey {
       case totals, calories, protein, carbs, fat, confidence, source, notes, items, error
       case foodName = "food_name"
+      case nutritionBasis = "nutrition_basis"
+      case review
     }
   }
 }
@@ -112,6 +180,8 @@ public enum EstimateEvent: Sendable, Equatable {
   case status(String)
   case delta
   case result(Estimate)
+  case item(index: Int, item: Estimate.Item)
+  case reset
 }
 
 /// Server-sent events parser. Blocks are split by a blank line. Feed it raw text in any chunks.
@@ -172,6 +242,20 @@ public struct SSEParser: Sendable {
       return stage.map(EstimateEvent.status)
     case "delta":
       return .delta
+    case "item":
+      struct Preview: Decodable {
+        var index: Int
+        var item: Estimate.Item
+      }
+      guard let preview = try? JSONDecoder().decode(Preview.self, from: data),
+        (0..<20).contains(preview.index), preview.item.grams.isFinite, preview.item.grams > 0,
+        !preview.item.name.trimmed.isEmpty,
+        [preview.item.calories, preview.item.protein, preview.item.carbs, preview.item.fat]
+          .allSatisfy({ $0.isFinite && $0 >= 0 })
+      else { return nil }
+      return .item(index: preview.index, item: preview.item)
+    case "reset":
+      return .reset
     case "result":
       return .result(try Estimate.parse(data))
     case "error":

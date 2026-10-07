@@ -1,0 +1,15 @@
+{
+  "source": "U.S. Department of Agriculture, Agricultural Research Service. FoodData Central.",
+  "dataset": "SR Legacy, April 2018 (final release)",
+  "url": "https://fdc.nal.usda.gov/fdc-datasets/FoodData_Central_sr_legacy_food_csv_2018-04.zip",
+  "archive_sha256": "b80817294b8850530aaedf2e515c02593b1824f763a0ff356e5c2081643e6fd0",
+  "license": "CC0 1.0",
+  "basis": "per 100 g edible portion; kcal and grams",
+  "nutrient_ids": {
+    "1008": "calories",
+    "1003": "protein",
+    "1005": "carbs",
+    "1004": "fat"
+  },
+  "food_count": 42
+}

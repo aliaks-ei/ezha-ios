@@ -51,4 +51,12 @@ struct ImageProcessingTests {
       try await ImageProcessing.jpeg(from: Data("not an image".utf8))
     }
   }
+
+  @Test func labelScansPreserveMoreTextDetailWithoutLocation() async throws {
+    let jpeg = try await ImageProcessing.jpeg(from: largePhotoWithLocation(), forLabel: true)
+    let props = try properties(jpeg)
+    #expect(props[kCGImagePropertyPixelWidth] as? Int == 1800)
+    #expect(props[kCGImagePropertyPixelHeight] as? Int == 1200)
+    #expect(props[kCGImagePropertyGPSDictionary] == nil)
+  }
 }

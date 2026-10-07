@@ -40,6 +40,53 @@ struct EstimateParsingTests {
     }
   }
 
+  @Test func labelsRequireAnExplicitPer100gContract() throws {
+    let json = """
+      {"totals":{"calories":400,"protein":10,"carbs":70,"fat":10},
+       "source":"label_photo","notes":"","nutrition_basis":"per_100g",
+       "items":[{"name":"Cereal","grams":100,"calories":400,"protein":10,"carbs":70,"fat":10,
+       "nutrition_source":"label","portion_estimated":false}]}
+      """
+    let estimate = try parse(json)
+    let item = try #require(LogItemMath.fromLabelEstimate(estimate, grams: 50).first)
+    #expect(LogItemMath.macros(item).calories == 200)
+    #expect(estimate.items.first?.nutritionSource == "label")
+    #expect(throws: AIError.self) {
+      try parse(json.replacingOccurrences(of: ",\"nutrition_basis\":\"per_100g\"", with: ""))
+    }
+    #expect(throws: AIError.self) {
+      try parse(json.replacingOccurrences(of: "per_100g", with: "per_portion"))
+    }
+  }
+
+  @Test func itemizedContractRejectsMissingItemsAndInvalidReviewIndices() {
+    #expect(throws: AIError.self) {
+      try parse(
+        #"{"totals":{"calories":1,"protein":1,"carbs":1,"fat":1},"source":"text","notes":"","nutrition_basis":"per_portion","items":[]}"#
+      )
+    }
+    #expect(throws: AIError.self) {
+      try parse(
+        #"{"totals":{"calories":1,"protein":1,"carbs":1,"fat":1},"source":"text","notes":"","review":{"question":"How much?","kind":"portion","item_index":3},"items":[]}"#
+      )
+    }
+  }
+
+  @Test func provisionalItemsAndResetAreSeparateFromFinalResults() throws {
+    let event = try SSEParser.estimateEvent(
+      from: .init(
+        event: "item",
+        data:
+          #"{"index":0,"item":{"name":"Rice","grams":150,"calories":195,"protein":4,"carbs":42,"fat":1}}"#
+      ))
+    guard case .item(let index, let item) = event else {
+      Issue.record("Expected a provisional item")
+      return
+    }
+    #expect(index == 0 && item.name == "Rice")
+    #expect(try SSEParser.estimateEvent(from: .init(event: "reset", data: "{}")) == .reset)
+  }
+
   @Test func parsesSuggestionsAndRejectsAnEmptyList() throws {
     let list = try MealSuggestion.parse(
       Data(
