@@ -7,9 +7,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		0212F6A23D061E45D866C911 /* OpenLoggerIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E7BF693B13E0A54B245E64E /* OpenLoggerIntent.swift */; };
 		0EFA9BDE26804354503CC91C /* EZHAKit in Frameworks */ = {isa = PBXBuildFile; productRef = 4AC438C57492CB2C6A94FBF9 /* EZHAKit */; };
 		87AB4A2CD7BC1B39688804FE /* EZHAKit in Frameworks */ = {isa = PBXBuildFile; productRef = BADEF0535F0BA2389C9294DB /* EZHAKit */; };
+		B859BE443A9DF63531A754BF /* OpenLoggerIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 87520F7DB18F2430AF2DE50C /* OpenLoggerIntent.swift */; };
 		BF9A8AD68EA3B6296C6A6E6D /* EZHAWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 8C175E03E2F90D8D94B89155 /* EZHAWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		D9FF31257BCB5EBFF22C058F /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7392757BE0E440A73BD840CB /* WidgetKit.framework */; };
 		DB0F52459E3B308FB0A93BE2 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5EEB0FB830D1FD8B3B196545 /* SwiftUI.framework */; };
@@ -40,10 +40,10 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		2E7BF693B13E0A54B245E64E /* OpenLoggerIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenLoggerIntent.swift; sourceTree = "<group>"; };
 		51FE1BFEA346DD0EB43A29C6 /* EZHAKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = EZHAKit; path = Packages/EZHAKit; sourceTree = SOURCE_ROOT; };
 		5EEB0FB830D1FD8B3B196545 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 		7392757BE0E440A73BD840CB /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
+		87520F7DB18F2430AF2DE50C /* OpenLoggerIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenLoggerIntent.swift; sourceTree = "<group>"; };
 		89FB2A3672E9766BF286AD11 /* Shared.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Shared.xcconfig; sourceTree = "<group>"; };
 		8C175E03E2F90D8D94B89155 /* EZHAWidgets.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = EZHAWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		AB395FD99030C7BD75F9B75D /* EZHA.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = EZHA.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -136,9 +136,9 @@
 			isa = PBXGroup;
 			children = (
 				AB31347AA74785D706814DF1 /* Config */,
+				9135F53EB727B950F712B36A /* EZHA */,
 				A55F0B8941FE4FCAC9BA2FC7 /* EZHA */,
 				57BAE1FF4B0913D26F91A867 /* EZHAWidgets */,
-				B88DDCCB77CF857E64F635AE /* Intents */,
 				2D3FB14F4E6CCAD7AF9E33D0 /* Packages */,
 				06970A618EE64B42D6E4D6D6 /* Frameworks */,
 				620F62B5AD1F5F8C4A87F66F /* Products */,
@@ -154,21 +154,28 @@
 			name = Products;
 			sourceTree = "<group>";
 		};
+		854F65AEBA9B281242070A8B /* Intents */ = {
+			isa = PBXGroup;
+			children = (
+				87520F7DB18F2430AF2DE50C /* OpenLoggerIntent.swift */,
+			);
+			path = Intents;
+			sourceTree = "<group>";
+		};
+		9135F53EB727B950F712B36A /* EZHA */ = {
+			isa = PBXGroup;
+			children = (
+				854F65AEBA9B281242070A8B /* Intents */,
+			);
+			path = EZHA;
+			sourceTree = "<group>";
+		};
 		AB31347AA74785D706814DF1 /* Config */ = {
 			isa = PBXGroup;
 			children = (
 				89FB2A3672E9766BF286AD11 /* Shared.xcconfig */,
 			);
 			path = Config;
-			sourceTree = "<group>";
-		};
-		B88DDCCB77CF857E64F635AE /* Intents */ = {
-			isa = PBXGroup;
-			children = (
-				2E7BF693B13E0A54B245E64E /* OpenLoggerIntent.swift */,
-			);
-			name = Intents;
-			path = EZHA/Intents;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -286,7 +293,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				0212F6A23D061E45D866C911 /* OpenLoggerIntent.swift in Sources */,
+				B859BE443A9DF63531A754BF /* OpenLoggerIntent.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -380,7 +387,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				DEVELOPMENT_TEAM = 7K4AP6UBNJ;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -471,7 +478,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = 7K4AP6UBNJ;
 				ENABLE_NS_ASSERTIONS = NO;
