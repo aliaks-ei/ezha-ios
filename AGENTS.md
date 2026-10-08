@@ -1,6 +1,6 @@
 # Agent guide
 
-Native SwiftUI app (`EZHA/`) with a shared package (`Packages/EZHAKit`). Product rules: `PRODUCT.md`. Build history and handoff: `PROGRESS.md`.
+Native SwiftUI app (`EZHA/`) with a shared package (`Packages/EZHAKit`). Product rules: `PRODUCT.md`.
 
 ## Never open Xcode
 
