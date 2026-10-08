@@ -104,7 +104,6 @@ final class LoggerModel {
   var hasInput: Bool { !state.isEmpty || imageData != nil }
   var totals: MacroTotals { LogItemMath.totals(state.items) }
   var hasAIItems: Bool { state.items.contains { $0.origin == .ai } }
-  var showsLabelOverrides: Bool { state.aiItemsFromLabel && hasAIItems }
   var canRestorePreviousEstimate: Bool {
     guard let previousEstimate else { return false }
     return !isEstimating && !isSaving && previousEstimate.photoId == state.photoId
@@ -198,19 +197,21 @@ final class LoggerModel {
 
   // MARK: Photo
 
-  func attachPhoto(_ raw: Data, isLabel: Bool) async {
+  /// Returns true when the photo is attached.
+  @discardableResult
+  func attachPhoto(_ raw: Data, isLabel: Bool) async -> Bool {
     uploadTask?.cancel()
     uploadTask = nil
     let attachment = UUID()
     attachmentId = attachment
     do {
-      let jpeg = try await ImageProcessing.jpeg(from: raw, forLabel: isLabel || state.isLabel)
-      guard attachmentId == attachment else { return }
+      let jpeg = try await ImageProcessing.jpeg(from: raw, forLabel: isLabel)
+      guard attachmentId == attachment else { return false }
       imageData = jpeg
       state.photoId = UUID().uuidString
       state.pendingImagePath = nil
       state.entryId = UUID()
-      if isLabel { state.isLabel = true }
+      state.isLabel = isLabel
       errorMessage = nil
       // Once consent is given, storage upload can overlap with entering the description.
       if appModel.isAIConsentGiven {
@@ -229,8 +230,10 @@ final class LoggerModel {
           }
         }
       }
+      return true
     } catch {
       if attachmentId == attachment { errorMessage = error.localizedDescription }
+      return false
     }
   }
 
@@ -522,17 +525,16 @@ final class LoggerModel {
     }
   }
 
-  /// Display macros of the first AI item at its current grams.
-  var labelDisplayMacros: MacroTotals? {
-    state.items.first { $0.origin == .ai }.map(LogItemMath.macros)
-  }
-
-  /// Label overrides: edited display macros at the current grams become per 100 g.
-  func applyLabelOverride(_ edited: MacroTotals) {
-    guard let index = state.items.firstIndex(where: { $0.origin == .ai }) else { return }
-    let item = state.items[index]
-    state.items[index] = LogItemMath.applyingEditedLabelMacros(
-      to: item, edited: edited, grams: LogItemMath.validGrams(item.gramsText))
+  /// Sets one per-100 g value. The item keeps its grams and is stored per 100 g from now on.
+  func setPer100g(_ id: UUID, _ keyPath: WritableKeyPath<MacroTotals, Double>, _ value: Double) {
+    guard value.isFinite, value >= 0,
+      let index = state.items.firstIndex(where: { $0.id == id })
+    else { return }
+    var per100g = state.items[index].per100g
+    per100g[keyPath: keyPath] = value
+    state.items[index].macroBasis = .per100g
+    state.items[index].baseGrams = 100
+    state.items[index].base = per100g
   }
 
   // MARK: Log

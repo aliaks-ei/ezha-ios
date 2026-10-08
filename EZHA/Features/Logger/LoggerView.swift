@@ -7,15 +7,17 @@ struct LoggerView: View {
   var date: DateKey
   @Environment(AppModel.self) private var appModel
   @State private var model: LoggerModel?
+  @State private var isShortSheet = false
 
   var body: some View {
     NavigationStack {
       if let model {
-        LoggerContent(model: model)
+        LoggerContent(model: model, isShortSheet: isShortSheet)
       } else {
         ProgressView()
       }
     }
+    .onGeometryChange(for: Bool.self) { $0.size.height < 700 } action: { isShortSheet = $0 }
     .task {
       guard model == nil else { return }
       let model = LoggerModel(date: date, appModel: appModel)
@@ -30,6 +32,8 @@ struct LoggerView: View {
 
 private struct LoggerContent: View {
   @Bindable var model: LoggerModel
+  /// A compact iPhone: the day balance shows as one line.
+  var isShortSheet: Bool
   @Environment(AppModel.self) private var appModel
   @Environment(\.dismiss) private var dismiss
   @Environment(\.scenePhase) private var scenePhase
@@ -37,6 +41,8 @@ private struct LoggerContent: View {
   @Environment(\.dynamicTypeSize) private var dynamicTypeSize
   @Environment(\.colorScheme) private var colorScheme
   @State private var photoItem: PhotosPickerItem?
+  @State private var isPhotoLabel = false
+  @State private var expandedId: UUID?
   @State private var isPhotosPresented = false
   @State private var isCameraPresented = false
   @State private var isScannerPresented = false
@@ -119,28 +125,25 @@ private struct LoggerContent: View {
         LoggerPortionEditor(model: model, itemId: id)
       case .food(let id):
         LoggerFoodEditor(model: model, itemId: id, runAI: runAI)
-      case .nutrition:
-        LoggerNutritionDetails(model: model) {
-          isEditingSource = true
-        }
       }
     }
     .photosPicker(isPresented: $isPhotosPresented, selection: $photoItem, matching: .images)
     .onChange(of: photoItem) { _, item in
       guard let item else { return }
       photoItem = nil
+      let isLabel = isPhotoLabel
       Task {
         if let data = try? await item.loadTransferable(type: Data.self) {
-          await model.attachPhoto(data, isLabel: false)
+          await attachAndEstimate(data, isLabel: isLabel)
         }
       }
     }
     .fullScreenCover(isPresented: $isCameraPresented) {
-      CameraPicker { data in Task { await model.attachPhoto(data, isLabel: false) } }
+      CameraPicker { data in Task { await attachAndEstimate(data, isLabel: false) } }
         .ignoresSafeArea()
     }
     .fullScreenCover(isPresented: $isScannerPresented) {
-      DocumentScanner { data in Task { await model.attachPhoto(data, isLabel: true) } }
+      DocumentScanner { data in Task { await attachAndEstimate(data, isLabel: true) } }
         .ignoresSafeArea()
     }
     .aiConsentAlert($consentAction)
@@ -166,7 +169,9 @@ private struct LoggerContent: View {
     .onChange(of: model.estimateCount) { _, _ in
       isEditingSource = false
       hideKeyboard()
+      expandSingleItem()
     }
+    .onAppear(perform: expandSingleItem)
     .task { await appModel.libraryStore.load() }
     .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification))
     {
@@ -209,21 +214,34 @@ private struct LoggerContent: View {
     VStack(alignment: .leading, spacing: 20) {
       Text("What did you eat?")
         .font(.title2.weight(.semibold))
-      TextField(
-        "What did you eat?", text: $model.state.text,
-        prompt: Text(
-          model.imageData == nil
-            ? "Describe your meal, e.g. 150 g chicken and rice" : "Add details (optional)"),
-        axis: .vertical
-      )
-      .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3...10 : 2...6)
-      .focused($isTextFocused)
-      .disabled(model.isEstimating)
-      .accessibilityIdentifier("mealText")
-      .padding(16)
-      .background(Color.canvas, in: .rect(cornerRadius: 12))
 
-      attachments
+      sourceTiles
+
+      HStack(alignment: .bottom, spacing: 4) {
+        TextField(
+          "What did you eat?", text: $model.state.text,
+          prompt: Text(
+            model.imageData == nil
+              ? "Or describe it, e.g. 150 g chicken and rice" : "Add details (optional)"),
+          axis: .vertical
+        )
+        .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3...10 : 2...6)
+        .focused($isTextFocused)
+        .accessibilityIdentifier("mealText")
+        .padding(.vertical, 16)
+        Button("Choose from Photos", systemImage: "photo.on.rectangle") {
+          pickPhoto(isLabel: false)
+        }
+        .labelStyle(.iconOnly)
+        .font(.title3)
+        .frame(minWidth: 44, minHeight: 44)
+        .padding(.bottom, 6)
+        .accessibilityIdentifier("attachPhotos")
+      }
+      .padding(.leading, 16)
+      .padding(.trailing, 6)
+      .background(Color.canvas, in: .rect(cornerRadius: 12))
+      .disabled(model.isEstimating)
 
       if let data = model.imageData, let image = UIImage(data: data) {
         photoPreview(image)
@@ -248,58 +266,61 @@ private struct LoggerContent: View {
     .animation(.smooth, value: model.isEstimating)
   }
 
-  /// Entry tools stay quiet and are hidden after estimation.
-  private var attachments: some View {
-    ViewThatFits(in: .horizontal) {
-      HStack(spacing: 20) { attachmentButtons }
-      ScrollView(.horizontal, showsIndicators: false) {
-        HStack(spacing: 20) { attachmentButtons }
+  /// The three ways to start: a food photo, a nutrition label, or a saved food.
+  private var sourceTiles: some View {
+    let layout =
+      dynamicTypeSize.isAccessibilitySize
+      ? AnyLayout(VStackLayout(spacing: 12)) : AnyLayout(HStackLayout(spacing: 12))
+    return layout {
+      sourceTile("Photo of food", systemImage: "camera", id: "attachCamera") {
+        if CameraPicker.isAvailable { isCameraPresented = true } else { pickPhoto(isLabel: false) }
+      }
+      sourceTile("Scan label", systemImage: "doc.text.viewfinder", id: "attachScan") {
+        runAI {
+          if DocumentScanner.isAvailable { isScannerPresented = true } else { pickPhoto(isLabel: true) }
+        }
+      }
+      sourceTile("Saved foods", systemImage: "books.vertical", id: "attachLibrary") {
+        isLibraryPresented = true
       }
     }
     .disabled(model.isEstimating)
   }
 
-  @ViewBuilder
-  private var attachmentButtons: some View {
-    if CameraPicker.isAvailable {
-      entryButton("Camera", systemImage: "camera", id: "attachCamera") {
-        isCameraPresented = true
-      }
-    }
-    entryButton(
-      "Photos", systemImage: "photo.on.rectangle", id: "attachPhotos"
-    ) {
-      isPhotosPresented = true
-    }
-    entryButton("Library", systemImage: "books.vertical", id: "attachLibrary") {
-      isLibraryPresented = true
-    }
-    if DocumentScanner.isAvailable {
-      Menu {
-        Button("Scan label", systemImage: "doc.text.viewfinder") {
-          runAI { isScannerPresented = true }
-        }
-        .accessibilityIdentifier("attachScan")
-      } label: {
-        Label("More input options", systemImage: "ellipsis")
-          .labelStyle(.iconOnly)
-          .frame(minWidth: 44, minHeight: 44)
-      }
-    }
-  }
-
-  private func entryButton(
-    _ title: LocalizedStringKey, systemImage: String, id: String,
-    action: @escaping () -> Void
+  private func sourceTile(
+    _ title: LocalizedStringKey, systemImage: String, id: String, action: @escaping () -> Void
   ) -> some View {
     Button(action: action) {
-      Label(title, systemImage: systemImage)
-        .font(.subheadline)
-        .fixedSize(horizontal: true, vertical: false)
-        .frame(minHeight: 44)
+      VStack(spacing: 8) {
+        Image(systemName: systemImage)
+          .font(.title2)
+          .foregroundStyle(Color.brandPrimary)
+        Text(title)
+          .font(.subheadline.weight(.medium))
+          .foregroundStyle(.primary)
+          .multilineTextAlignment(.center)
+      }
+      .frame(maxWidth: .infinity, minHeight: 88)
+      .padding(.vertical, 8)
+      .background(Color.canvas, in: .rect(cornerRadius: 16))
+      .contentShape(.rect(cornerRadius: 16))
     }
-    .buttonStyle(.borderless)
+    .buttonStyle(.plain)
     .accessibilityIdentifier(id)
+  }
+
+  private func pickPhoto(isLabel: Bool) {
+    isPhotoLabel = isLabel
+    isPhotosPresented = true
+  }
+
+  /// A photo starts the estimate at once; text typed before it is included.
+  private func attachAndEstimate(_ data: Data, isLabel: Bool) async {
+    if await model.attachPhoto(data, isLabel: isLabel) { runAI(model.estimate) }
+  }
+
+  private func expandSingleItem() {
+    if model.state.items.count == 1 { expandedId = model.state.items.first?.id }
   }
 
   private func photoPreview(_ image: UIImage) -> some View {
@@ -320,16 +341,10 @@ private struct LoggerContent: View {
             .offset(x: 14, y: -14)
             .disabled(model.isEstimating)
         }
-      Toggle("Nutrition label", isOn: $model.state.isLabel)
-        .disabled(model.isEstimating)
       if model.state.isLabel {
-        LabeledContent("Grams eaten") {
-          TextField("Optional", text: $model.state.labelGramsText)
-            .accessibilityIdentifier("labelGrams")
-            .keyboardType(.decimalPad)
-            .multilineTextAlignment(.trailing)
-            .monospacedDigit()
-        }
+        Text("Nutrition label")
+          .font(.subheadline)
+          .foregroundStyle(.secondary)
       }
     }
   }
@@ -337,41 +352,13 @@ private struct LoggerContent: View {
   // MARK: Review
 
   private func reviewContent(compact: Bool) -> some View {
-    VStack(alignment: .leading, spacing: compact ? 12 : 28) {
+    VStack(alignment: .leading, spacing: compact ? 12 : 20) {
       ForEach(Array(model.state.items.enumerated()), id: \.element.id) { index, item in
-        LoggerReviewItem(model: model, item: item, index: index, compact: compact)
-        if index < model.state.items.count - 1 {
-          Divider()
+        LoggerReviewItem(
+          model: model, item: item, index: index, isExpanded: expandedId == item.id
+        ) {
+          expandedId = expandedId == item.id ? nil : item.id
         }
-      }
-      if model.state.items.count == 1 {
-        Divider()
-        VStack(alignment: .leading, spacing: 8) {
-          Text(model.hasAIItems ? "Estimated total" : "Meal total")
-            .font(.subheadline)
-            .foregroundStyle(Color.ink.opacity(0.7))
-          KcalText(value: model.totals.calories)
-            .font(compact ? .title.weight(.semibold) : .largeTitle.weight(.semibold))
-            .accessibilityIdentifier("reviewTotal")
-        }
-      }
-      VStack(spacing: 0) {
-        Divider()
-        NavigationLink(value: LoggerDestination.nutrition) {
-          HStack(spacing: 12) {
-            Text("Nutrition & estimate details")
-              .foregroundStyle(.primary)
-            Spacer(minLength: 0)
-            Image(systemName: "chevron.right")
-              .font(.subheadline.weight(.semibold))
-              .foregroundStyle(.secondary)
-          }
-          .frame(minHeight: compact ? 44 : 56)
-          .padding(.vertical, compact ? 0 : 4)
-          .contentShape(.rect)
-        }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier("nutritionDetails")
         Divider()
       }
       Button {
@@ -382,20 +369,43 @@ private struct LoggerContent: View {
       }
       .accessibilityIdentifier("addFood")
     }
+    .animation(reduceMotion ? nil : .smooth(duration: 0.25), value: expandedId)
   }
 
   // MARK: Bottom bar
 
   private var bottomBar: some View {
     VStack(spacing: 8) {
-      if !isEntryVisible && model.state.items.count > 1 {
-        HStack {
-          Text(model.hasAIItems ? "Estimated total" : "Meal total")
-            .foregroundStyle(.secondary)
-          Spacer()
-          KcalText(value: model.totals.calories).font(.headline)
+      if !isEntryVisible {
+        let day = appModel.dayStore.merged(model.date).flatMap { $0.goals.calories > 0 ? $0 : nil }
+        VStack(alignment: .leading, spacing: 8) {
+          let stacked = dynamicTypeSize.isAccessibilitySize
+          (stacked
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
+            : AnyLayout(HStackLayout(alignment: .firstTextBaseline)))
+          {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+              Text(model.hasAIItems ? "Estimated total" : "Meal total")
+                .foregroundStyle(.secondary)
+              KcalText(value: model.totals.calories).font(.headline)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("reviewTotal")
+            if !stacked { Spacer(minLength: 8) }
+            if let day {
+              DayImpact.remaining(
+                day.goals.calories, day.totals.calories + model.totals.calories, unit: "kcal"
+              )
+              .font(.subheadline.weight(.semibold))
+              .accessibilityLabel("Calories after this meal")
+            }
+          }
+          if let day {
+            DayImpact(
+              goals: day.goals, eaten: day.totals, meal: model.totals,
+              isCompact: isShortSheet || isKeyboardVisible || dynamicTypeSize.isAccessibilitySize)
+          }
         }
-        .accessibilityIdentifier("reviewTotal")
       }
       if model.isStale {
         Text("Your photo or description changed. Update the estimate before logging.")
@@ -454,6 +464,7 @@ private struct LoggerContent: View {
     .padding(.vertical, 12)
     .frame(maxWidth: .infinity)
     .background(Color.surface)
+    .overlay(alignment: .top) { if !isEntryVisible { Divider() } }
   }
 
   private var isPrimaryDisabled: Bool {
@@ -511,5 +522,106 @@ private struct LoggerContent: View {
     isTextFocused = false
     UIApplication.shared.sendAction(
       #selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+  }
+}
+
+/// The day's balance after this meal: a calorie bar, then protein, carbs and fat.
+private struct DayImpact: View {
+  var goals: MacroTotals
+  var eaten: MacroTotals
+  var meal: MacroTotals
+  var isCompact: Bool
+
+  var body: some View {
+    Group {
+      if isCompact {
+        let over = macros.filter { $0.goal > 0 && $0.eaten + $0.meal > $0.goal }
+        if !over.isEmpty {
+          Text(
+            over.map { "\($0.title) \(Self.format($0.eaten + $0.meal - $0.goal)) g over" }
+              .joined(separator: " · ")
+          )
+          .font(.footnote)
+          .foregroundStyle(Color.danger)
+          .frame(maxWidth: .infinity, alignment: .trailing)
+        }
+      } else {
+        VStack(spacing: 10) {
+          ImpactBar(
+            goal: goals.calories, eaten: eaten.calories, meal: meal.calories, color: .brandPrimary)
+          HStack(alignment: .top, spacing: 16) {
+            ForEach(macros, id: \.title) { macro in
+              VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 4) {
+                  Text(macro.title).foregroundStyle(.secondary).lineLimit(1)
+                  Spacer(minLength: 0)
+                  Self.remaining(macro.goal, macro.eaten + macro.meal, unit: "g")
+                    .fontWeight(.semibold)
+                    .layoutPriority(1)
+                }
+                ImpactBar(
+                  goal: macro.goal, eaten: macro.eaten, meal: macro.meal, color: macro.color)
+              }
+              .accessibilityElement(children: .ignore)
+              .accessibilityLabel(macro.title)
+              .accessibilityValue(
+                Self.remainingText(macro.goal, macro.eaten + macro.meal, unit: "grams"))
+            }
+          }
+          .font(.caption)
+        }
+      }
+    }
+    .accessibilityIdentifier("dayImpact")
+  }
+
+  private var macros: [(title: String, goal: Double, eaten: Double, meal: Double, color: Color)] {
+    [
+      (String(localized: "Protein"), goals.protein, eaten.protein, meal.protein, .brandSecondary),
+      (String(localized: "Carbs"), goals.carbs, eaten.carbs, meal.carbs, .brandAccent),
+      (String(localized: "Fat"), goals.fat, eaten.fat, meal.fat, .brandPrimary),
+    ]
+  }
+
+  static func remaining(_ goal: Double, _ total: Double, unit: String) -> some View {
+    Text(remainingText(goal, total, unit: unit))
+      .fontDesign(.rounded)
+      .monospacedDigit()
+      .foregroundStyle(total > goal ? Color.danger : Color.primary)
+  }
+
+  private static func remainingText(_ goal: Double, _ total: Double, unit: String) -> String {
+    total > goal
+      ? String(localized: "\(format(total - goal)) \(unit) over")
+      : String(localized: "\(format(goal - total)) \(unit) left")
+  }
+
+  private static func format(_ value: Double) -> String {
+    value.formatted(.number.precision(.fractionLength(0)))
+  }
+}
+
+/// Eaten so far (solid) and this meal (light) on the day's track. Over the goal, the meal part is red.
+private struct ImpactBar: View {
+  var goal: Double
+  var eaten: Double
+  var meal: Double
+  var color: Color
+
+  var body: some View {
+    GeometryReader { geometry in
+      let scale = max(goal, eaten + meal, 1)
+      HStack(spacing: 0) {
+        Rectangle().fill(color).frame(width: geometry.size.width * eaten / scale)
+        Rectangle()
+          .fill(eaten + meal > goal ? Color.danger : color.opacity(0.4))
+          .frame(width: geometry.size.width * meal / scale)
+      }
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .background(Color.track)
+      .clipShape(.capsule)
+    }
+    .frame(height: 6)
+    .accessibilityHidden(true)
   }
 }

@@ -1,0 +1,602 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Meal Review Options</title>
+<style>
+:root {
+  --page-bg: #FBF8FB; --page-ink: #261D35; --page-sec: #6B6475; --card: #FFFFFF; --line: #E8E2EA;
+  --brand: #D12786; --protein: #5A50E7; --carbs: #FF8E4D; --fat: #D12786;
+  --ink: #261D35; --danger: #EC3642; --track: rgba(50,7,115,.12);
+  --grouped: #F2F2F7; --sep: rgba(60,60,67,.16); --sec: rgba(60,60,67,.62); --field: rgba(118,118,128,.12);
+}
+@media (prefers-color-scheme: dark) {
+  :root { --page-bg: #120C18; --page-ink: #F3EEF6; --page-sec: #A89FB3; --card: #1C1424; --line: #2E2438; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page-bg); color: var(--page-ink);
+  font: 16px/1.5 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif; }
+main { max-width: 1180px; margin: 0 auto; padding: 48px 16px 96px; }
+h1 { font-size: 34px; line-height: 1.15; margin: 0 0 8px; letter-spacing: -.02em; }
+h2 { font-size: 26px; margin: 72px 0 8px; letter-spacing: -.01em; }
+h3 { font-size: 17px; margin: 20px 0 6px; }
+p, li { color: var(--page-ink); }
+.muted { color: var(--page-sec); }
+.lede { font-size: 18px; max-width: 760px; }
+ol, ul { padding-left: 22px; margin: 6px 0; }
+li { margin: 4px 0; }
+code { font: 13px ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: 1px 5px; }
+.panel { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 20px 24px; }
+.option { display: flex; flex-wrap: wrap; gap: 40px; align-items: flex-start; margin-top: 20px; }
+.notes { flex: 1 1 380px; max-width: 560px; }
+.tag { display: inline-block; font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--brand); margin-bottom: 4px; }
+.pick { background: var(--brand); color: #fff; border-radius: 99px; padding: 2px 10px; margin-left: 8px; font-size: 12px; vertical-align: middle; text-transform: none; letter-spacing: 0; }
+table.cmp { width: 100%; border-collapse: collapse; font-size: 15px; }
+table.cmp th, table.cmp td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+table.cmp th { font-size: 13px; color: var(--page-sec); font-weight: 600; }
+.table-wrap { overflow-x: auto; }
+.hint { font-size: 13px; color: var(--page-sec); margin-top: 10px; text-align: center; }
+
+/* ---------- Phone ---------- */
+.phone-col { flex: 0 0 auto; }
+.phone { width: 390px; height: 844px; border-radius: 58px; background: #0B0B0F; padding: 11px;
+  box-shadow: 0 30px 60px -20px rgba(38,29,53,.35), 0 0 0 1px rgba(0,0,0,.4); color: var(--ink); }
+.screen { width: 100%; height: 100%; border-radius: 47px; overflow: hidden; position: relative;
+  background: var(--grouped); display: flex; flex-direction: column; font-size: 17px; line-height: 1.3; }
+.status { height: 50px; flex: none; display: flex; align-items: center; justify-content: space-between; padding: 6px 30px 0 40px; font-weight: 600; font-size: 16px; }
+.island { width: 124px; height: 36px; background: #000; border-radius: 20px; }
+.status .bat { width: 26px; height: 12px; border: 1.5px solid var(--ink); border-radius: 4px; position: relative; }
+.status .bat::after { content: ""; position: absolute; inset: 1.5px; background: var(--ink); border-radius: 1.5px; }
+.nav { height: 56px; flex: none; display: grid; grid-template-columns: 56px 1fr 56px; align-items: center; padding: 0 14px; }
+.nav .t { text-align: center; font-weight: 600; font-size: 17px; line-height: 1.15; }
+.nav .t small { display: block; font-weight: 400; font-size: 13px; color: var(--sec); }
+.glass { width: 44px; height: 44px; border-radius: 50%; background: rgba(255,255,255,.9); box-shadow: 0 2px 10px rgba(0,0,0,.08);
+  display: grid; place-items: center; border: 0; color: var(--ink); }
+.glass.x { color: var(--brand); }
+.content { flex: 1; overflow-y: auto; padding: 4px 16px 20px; scrollbar-width: none; }
+.content::-webkit-scrollbar { display: none; }
+.footer { flex: none; background: rgba(255,255,255,.94); backdrop-filter: blur(20px); border-top: .5px solid var(--sep); padding: 12px 16px 28px; }
+.btn { width: 100%; height: 52px; border-radius: 26px; border: 0; background: var(--brand); color: #fff; font: 600 17px -apple-system, sans-serif; }
+.btn.off { background: rgba(118,118,128,.16); color: rgba(60,60,67,.35); }
+svg.i { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+svg.s { width: 16px; height: 16px; }
+.group { background: #fff; border-radius: 22px; overflow: hidden; }
+.sec-h { font-size: 13px; color: var(--sec); text-transform: uppercase; letter-spacing: .02em; margin: 18px 16px 6px; }
+.num { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
+.rounded { font-family: ui-rounded, "SF Pro Rounded", -apple-system, sans-serif; }
+.dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin: 0 4px 1px 0; vertical-align: middle; }
+.d-p { background: var(--protein); } .d-c { background: var(--carbs); } .d-f { background: var(--fat); } .d-k { background: var(--ink); }
+.flag { display: flex; align-items: center; gap: 6px; font-size: 14px; color: #A3570F; margin-top: 6px; }
+.flag::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--carbs); flex: none; }
+.src { font-size: 12px; color: var(--sec); }
+.over { color: var(--danger) !important; }
+input.fld { font: inherit; color: var(--ink); border: 0; background: var(--field); border-radius: 9px; text-align: right; padding: 5px 8px; width: 64px; outline: none; font-variant-numeric: tabular-nums; }
+input.fld:focus { box-shadow: 0 0 0 2px var(--brand); background: #fff; }
+.gfield { display: inline-flex; align-items: center; gap: 4px; background: var(--field); border-radius: 10px; padding: 0 10px 0 2px; font-size: 16px; }
+.gfield input.fld { background: transparent; width: 52px; padding: 6px 2px; font-weight: 600; }
+.gfield input.fld:focus { box-shadow: none; }
+.gfield:focus-within { box-shadow: 0 0 0 2px var(--brand); background: #fff; }
+.chip { border: 0; background: var(--field); color: var(--ink); border-radius: 99px; padding: 7px 12px; font: 500 14px -apple-system, sans-serif; }
+.round { width: 34px; height: 34px; border-radius: 50%; border: 0; background: var(--field); color: var(--brand); display: grid; place-items: center; }
+.seg { display: flex; background: var(--field); border-radius: 10px; padding: 2px; }
+.seg button { flex: 1; border: 0; background: transparent; border-radius: 8px; padding: 6px 8px; font: 500 14px -apple-system, sans-serif; color: var(--ink); }
+.seg button.on { background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,.12); font-weight: 600; }
+.link { color: var(--brand); background: none; border: 0; font: inherit; padding: 0; }
+.danger-link { color: var(--danger); background: none; border: 0; font: 15px -apple-system, sans-serif; padding: 0; }
+
+/* Bars: eaten (solid) + this meal (light, striped) on a track */
+.bar { position: relative; height: 6px; border-radius: 3px; background: var(--track); overflow: hidden; display: flex; }
+.bar .e { height: 100%; background: var(--c); }
+.bar .n { height: 100%; background: repeating-linear-gradient(-45deg, var(--c) 0 3px, color-mix(in srgb, var(--c) 45%, white) 3px 6px); }
+.bar .tick { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--ink); display: none; }
+.bar.over .tick { display: block; }
+.bar.over .n { background: repeating-linear-gradient(-45deg, var(--danger) 0 3px, #f7a1a7 3px 6px); }
+.c-k, .c-kcal { --c: var(--ink); } .c-p { --c: var(--protein); } .c-c { --c: var(--carbs); } .c-f { --c: var(--fat); }
+
+/* Option A */
+.a-row { padding: 14px 16px; border-bottom: .5px solid var(--sep); }
+.a-row:last-child { border-bottom: 0; }
+.a-r1 { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; cursor: pointer; }
+.a-r1 .n { font-weight: 600; font-size: 17px; }
+.a-r1 .k { font-weight: 600; font-size: 16px; white-space: nowrap; }
+.a-r2 { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 8px; }
+.a-macros { font-size: 13px; color: var(--sec); cursor: pointer; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.a-macros b { color: var(--ink); font-weight: 600; }
+.chev { transition: transform .2s; color: var(--sec); }
+.a-row.open .chev { transform: rotate(180deg); }
+.a-x { display: none; margin-top: 14px; }
+.a-row.open .a-x { display: block; }
+.ntable { display: grid; grid-template-columns: 1fr auto auto; gap: 6px 14px; align-items: center; font-size: 15px; }
+.ntable .h { font-size: 12px; color: var(--sec); text-align: right; }
+.ntable .v { text-align: right; font-weight: 600; min-width: 64px; }
+.a-tools { display: flex; gap: 8px; align-items: center; margin-top: 14px; flex-wrap: wrap; }
+.a-prep { margin-top: 14px; font-size: 14px; }
+.a-prep .seg { margin-top: 6px; }
+.impact-h { display: flex; justify-content: space-between; align-items: baseline; font-size: 14px; color: var(--sec); }
+.impact-h b { font-size: 17px; color: var(--ink); }
+.mini { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 10px 0 12px; font-size: 12px; }
+.mini .l { display: flex; justify-content: space-between; margin-bottom: 4px; color: var(--sec); }
+.mini .l span:last-child { color: var(--ink); font-weight: 600; }
+
+/* Option B */
+.b-impact { position: sticky; top: 0; z-index: 2; background: #fff; border-radius: 22px; padding: 12px 14px; margin-bottom: 12px; box-shadow: 0 6px 14px -10px rgba(0,0,0,.25); }
+.b-impact .cols { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 6px; }
+.b-impact .big { font-size: 19px; font-weight: 700; }
+.b-impact .w { font-size: 12px; color: var(--sec); }
+.b-impact .lab { font-size: 12px; color: var(--sec); margin-bottom: 2px; }
+.b-card { background: #fff; border-radius: 22px; padding: 14px 14px 12px; margin-bottom: 12px; }
+.b-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.b-head .n { font-weight: 600; }
+.stepper { display: flex; align-items: center; gap: 6px; }
+.b-grid { display: grid; grid-template-columns: 62px repeat(4, 1fr); gap: 6px 6px; margin-top: 12px; font-size: 15px; align-items: center; }
+.b-grid .h { font-size: 11px; color: var(--sec); text-align: right; }
+.b-grid .rl { font-size: 12px; color: var(--sec); }
+.b-grid .v { text-align: right; font-weight: 700; padding-right: 8px; }
+.b-grid input.fld { width: 100%; font-size: 14px; padding: 5px 7px; color: var(--sec); }
+.b-total { display: flex; justify-content: space-between; padding: 4px 16px; font-size: 15px; color: var(--sec); }
+.b-total b { color: var(--ink); }
+
+/* Option C */
+.c-head { background: #fff; border-radius: 22px; padding: 14px 16px; display: flex; gap: 16px; align-items: center; }
+.ring { position: relative; width: 112px; height: 112px; flex: none; }
+.ring svg { width: 112px; height: 112px; transform: rotate(-90deg); }
+.ring .mid { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; }
+.ring .mid b { font-size: 24px; line-height: 1; }
+.ring .mid span { font-size: 12px; color: var(--sec); }
+.c-bars { flex: 1; display: grid; gap: 10px; font-size: 13px; }
+.c-bars .l { display: flex; justify-content: space-between; margin-bottom: 4px; }
+.c-bars .l span:first-child { font-weight: 600; }
+.c-cap { font-size: 12px; color: var(--sec); margin: 8px 16px 0; }
+.c-row { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: .5px solid var(--sep); cursor: pointer; }
+.c-row:last-child { border-bottom: 0; }
+.c-row .body { flex: 1; min-width: 0; }
+.c-row .n { font-weight: 600; }
+.c-row .m { font-size: 13px; color: var(--sec); margin-top: 2px; }
+.c-row .k { text-align: right; font-size: 15px; font-weight: 600; white-space: nowrap; }
+.c-row .k small { display: block; font-weight: 400; font-size: 13px; color: var(--sec); }
+.c-row.sel { background: color-mix(in srgb, var(--brand) 7%, white); }
+.sheet { position: absolute; left: 0; right: 0; bottom: 0; height: 56%; background: #fff; border-radius: 34px 34px 0 0;
+  box-shadow: 0 -10px 40px rgba(0,0,0,.18); padding: 8px 18px 28px; display: flex; flex-direction: column; transition: transform .28s ease; z-index: 5; }
+.sheet.closed { transform: translateY(105%); }
+.grab { width: 38px; height: 5px; border-radius: 3px; background: rgba(60,60,67,.3); margin: 0 auto 8px; }
+.sh-top { display: flex; justify-content: space-between; align-items: center; }
+.sh-top .n { font-weight: 600; font-size: 19px; }
+.sh-g { display: flex; align-items: center; justify-content: center; gap: 16px; margin: 12px 0 8px; }
+.sh-g .gfield { font-size: 26px; padding: 2px 14px 2px 4px; }
+.sh-g .gfield input.fld { width: 80px; font-size: 26px; text-align: right; }
+.sh-g .round { width: 44px; height: 44px; }
+.chips { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; }
+.sh-rows { margin-top: 12px; display: grid; grid-template-columns: 1fr auto; gap: 8px 12px; align-items: center; font-size: 16px; }
+.sh-rows input.fld { width: 84px; }
+
+/* Entry */
+.tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 16px; }
+.tile { background: #fff; border-radius: 20px; padding: 16px 8px 14px; border: 0; display: grid; justify-items: center; gap: 8px; color: var(--brand); font: 500 14px -apple-system, sans-serif; }
+.tile span { color: var(--ink); }
+.tile svg.i { width: 28px; height: 28px; }
+.txt { margin-top: 16px; background: #fff; border-radius: 20px; padding: 14px 16px; min-height: 104px; color: rgba(60,60,67,.38); position: relative; }
+.txt .ph { position: absolute; right: 12px; bottom: 10px; color: var(--brand); }
+
+@media (max-width: 460px) { .phone { zoom: .82; } h1 { font-size: 28px; } }
+</style>
+</head>
+<body>
+<main>
+
+<span class="tag">EZHA · Meal logger · 8 October 2026</span>
+<h1>Meal review: three layout options</h1>
+<p class="lede">Each option lets you check and change grams, per-100 g values and portion macros without leaving the review, and shows how the meal changes today's balance before you log it. The phone mockups are interactive: type in the grams and per-100 g fields, use the steppers and tap the rows.</p>
+
+<div class="panel" style="margin-top:28px">
+  <h3 style="margin-top:0">What slows the user down now</h3>
+  <ol>
+    <li>The review shows grams and calories only. Protein, carbs and fat for a food are not shown anywhere.</li>
+    <li>Per-100 g values are never shown, not even for a scanned label.</li>
+    <li>To change grams: tap the pencil, open “Edit portion”, type, tap Done, go back. Four steps for each food.</li>
+    <li>You can only edit macros for a label, and only as a meal total on the “Nutrition details” screen, two levels down.</li>
+    <li>The review does not show the effect on today's target. You must log the meal and go back to Today to see it.</li>
+    <li>“Scan label” is hidden in the “…” menu, and a photo of a label needs a separate “Nutrition label” switch.</li>
+  </ol>
+  <h3>What every option must do</h3>
+  <ol>
+    <li>Show calories, protein, carbs and fat for each food on the review screen, with no navigation.</li>
+    <li>Let the user type grams directly. The numbers update while they type.</li>
+    <li>Show per-100 g and portion values side by side. Per-100 g values are editable, so the user can correct them from the label.</li>
+    <li>Show today after this meal: calories left and each macro left or over, live.</li>
+    <li>Keep one primary action, “Log meal”, with the meal total on it.</li>
+  </ol>
+</div>
+
+<!-- ================= ENTRY ================= -->
+<h2>Entry screen (the same for all options)</h2>
+<div class="option">
+  <div class="phone-col">
+    <div class="phone"><div class="screen">
+      <div class="status"><span>9:41</span><span class="island"></span><span class="bat"></span></div>
+      <div class="nav"><button class="glass x"><svg class="i" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button><div class="t">Add meal<small>Today</small></div><span></span></div>
+      <div class="content">
+        <div style="font-size:28px;font-weight:700;margin:8px 4px 0">What did you eat?</div>
+        <div class="tiles">
+          <button class="tile"><svg class="i" viewBox="0 0 24 24"><path d="M3.5 8.5h3.5l2-3h6l2 3h3.5v11h-17z"/><circle cx="12" cy="13.5" r="3.6"/></svg><span>Photo of food</span></button>
+          <button class="tile"><svg class="i" viewBox="0 0 24 24"><path d="M4 8V4h4M16 4h4v4M20 16v4h-4M8 20H4v-4"/><path d="M8.5 9h7M8.5 12h7M8.5 15h4.5"/></svg><span>Scan label</span></button>
+          <button class="tile"><svg class="i" viewBox="0 0 24 24"><path d="M4.5 4h3.5v16H4.5zM10.5 4H14v16h-3.5zM16 5.2l3-.9 3 14.8-3 .9z"/></svg><span>Saved foods</span></button>
+        </div>
+        <div class="txt">Or type it, e.g. 150 g chicken and rice
+          <span class="ph"><svg class="i" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2.5"/><circle cx="9" cy="10" r="1.8"/><path d="M21 16l-5-5-8.5 8"/></svg></span>
+        </div>
+        <div style="font-size:13px;color:var(--sec);margin:8px 6px">The photo icon picks an image from Photos. Label photos are detected, or you can switch the camera to Label mode.</div>
+      </div>
+      <div class="footer"><button class="btn off">Estimate nutrition</button></div>
+    </div></div>
+  </div>
+  <div class="notes">
+    <span class="tag">Change</span>
+    <h3 style="margin-top:0">Show the three ways in with the same weight</h3>
+    <ol>
+      <li>Show “Photo of food”, “Scan label” and “Saved foods” as three tiles. Scan label leaves the “…” menu.</li>
+      <li>Keep the text field below the tiles, with a Photos button inside it.</li>
+      <li>“Scan label” sets the label mode itself. Remove the “Nutrition label” switch.</li>
+      <li>After a label scan, the review opens with the grams field focused and the label's per-100 g values shown. The user types how much they ate and logs.</li>
+      <li>A photo or label goes to estimation right away. The user does not tap “Estimate nutrition” when there is no text to add.</li>
+    </ol>
+    <p class="muted">Item 5 changes the current flow, where the user can add text to a photo before the estimate. Keep a short delay with a “Add details” link if you want to keep that.</p>
+  </div>
+</div>
+
+<!-- ================= OPTION A ================= -->
+<h2>Option A: Expandable food rows <span class="tag pick">My pick</span></h2>
+<p class="muted">A calm list. Each row shows macros and an editable grams field. Tap a row to open the per-100 g table in place. The balance panel sits above Log meal.</p>
+<div class="option">
+  <div class="phone-col">
+    <div class="phone"><div class="screen" id="optA"></div></div>
+    <div class="hint">Tap a row to expand. Type in any field.</div>
+  </div>
+  <div class="notes">
+    <span class="tag">How it works</span>
+    <ol>
+      <li>Each food is one row: name, calories, protein, carbs and fat in grams, and a grams field.</li>
+      <li>Tap the grams field and type. The row, the meal total and the balance panel update while you type.</li>
+      <li>Tap the row to expand it. It shows a table with two columns: “Per 100 g” (editable) and “This portion”.</li>
+      <li>The expanded row also has ±10 g buttons, the optional Raw / Cooked question, and Remove.</li>
+      <li>The panel above Log meal shows today after this meal: calories left and each macro left or over. The striped part of each bar is this meal.</li>
+    </ol>
+    <span class="tag">Good</span>
+    <ul>
+      <li>Grams and macros: no taps to see, one tap to change. Per-100 g: one tap.</li>
+      <li>The default view stays calm. Detail shows only for the food you open.</li>
+      <li>The balance panel is next to Log meal, where the user decides.</li>
+      <li>Native parts: list rows, <code>Grid</code>, <code>TextField</code> with <code>.decimalPad</code>, the existing bottom <code>safeAreaInset</code>.</li>
+    </ul>
+    <span class="tag">Watch</span>
+    <ul>
+      <li>The panel is about 150 pt tall. On a compact iPhone, collapse it to one line (“254 kcal left · Protein 6 g over”) that expands on tap.</li>
+      <li>Keep only one row open at a time, so the list does not get long.</li>
+      <li>Add a keyboard toolbar with Previous, Next and Done to move between fields.</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ================= OPTION B ================= -->
+<h2>Option B: Nutrition table for each food</h2>
+<p class="muted">Every number is visible at all times. Each food is a card with a per-100 g row and a portion row. The balance strip stays at the top while you scroll.</p>
+<div class="option">
+  <div class="phone-col">
+    <div class="phone"><div class="screen" id="optB"></div></div>
+    <div class="hint">Use the steppers or type in the per-100 g row.</div>
+  </div>
+  <div class="notes">
+    <span class="tag">How it works</span>
+    <ol>
+      <li>The balance strip at the top shows calories, protein, carbs and fat left after this meal. It stays in place while you scroll.</li>
+      <li>Each food card has a grams stepper in the header.</li>
+      <li>Under it is a table: the “100 g” row is editable, the portion row is calculated.</li>
+      <li>The meal total is under the last card and on the Log meal button.</li>
+    </ol>
+    <span class="tag">Good</span>
+    <ul>
+      <li>No taps to see any number. This is the fastest way to compare a result with a label.</li>
+      <li>Easy to compare foods, because the columns line up.</li>
+    </ul>
+    <span class="tag">Watch</span>
+    <ul>
+      <li>Dense. Most meals do not need per-100 g values every time.</li>
+      <li>Five columns do not fit at large text sizes. At accessibility sizes, each card must change to stacked rows.</li>
+      <li>Three foods already scroll on a standard iPhone.</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ================= OPTION C ================= -->
+<h2>Option C: Balance header and an edit sheet</h2>
+<p class="muted">The day's balance is the main element. Foods are compact rows. Tap a food to edit it in a half-height sheet, and the balance above stays visible and updates live.</p>
+<div class="option">
+  <div class="phone-col">
+    <div class="phone"><div class="screen" id="optC"></div></div>
+    <div class="hint">The sheet is open on Chicken breast. Tap Done, then tap any row.</div>
+  </div>
+  <div class="notes">
+    <span class="tag">How it works</span>
+    <ol>
+      <li>The header shows the calorie ring and three macro bars. The striped part is this meal.</li>
+      <li>The list shows each food: grams, calories and macros.</li>
+      <li>Tap a food to open a sheet at half height: large grams field, −/+ buttons, quick amounts, and a “Per 100 g / This portion” switch with editable values.</li>
+      <li>The header stays visible above the sheet and changes while you edit.</li>
+    </ol>
+    <span class="tag">Good</span>
+    <ul>
+      <li>Best answer to “does this meal fit my day?”.</li>
+      <li>Large touch targets. Works well at large text sizes.</li>
+      <li>Native: <code>.presentationDetents([.medium, .large])</code> with <code>.presentationBackgroundInteraction(.enabled(upThrough: .medium))</code>.</li>
+    </ul>
+    <span class="tag">Watch</span>
+    <ul>
+      <li>One more tap than A to see per-100 g values or to change grams.</li>
+      <li>The user must close the sheet to change to a different food.</li>
+      <li>A sheet on top of the logger sheet adds one level of depth.</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ================= COMPARISON ================= -->
+<h2>Comparison</h2>
+<div class="panel table-wrap">
+<table class="cmp">
+  <tr><th>Task</th><th>Now</th><th>A: Rows</th><th>B: Table</th><th>C: Header + sheet</th></tr>
+  <tr><td>See protein, carbs, fat for a food</td><td>Not possible</td><td>0 taps</td><td>0 taps</td><td>0 taps</td></tr>
+  <tr><td>See per-100 g values</td><td>Not possible</td><td>1 tap</td><td>0 taps</td><td>1 tap</td></tr>
+  <tr><td>Change grams</td><td>4 steps</td><td>1 tap + type</td><td>1 tap</td><td>2 taps + type</td></tr>
+  <tr><td>Correct a value from the label</td><td>Meal total only, 2 screens down</td><td>1 tap + type</td><td>1 tap + type</td><td>2 taps + type</td></tr>
+  <tr><td>See today after this meal</td><td>Not shown</td><td>Always, above Log meal</td><td>Always, top strip</td><td>Always, large header</td></tr>
+  <tr><td>Compact iPhone</td><td>—</td><td>Good, with one-line panel</td><td>Tight</td><td>Good</td></tr>
+  <tr><td>Large text sizes</td><td>—</td><td>Good</td><td>Needs a second layout</td><td>Good</td></tr>
+  <tr><td>Build size</td><td>—</td><td>Medium</td><td>Medium</td><td>Medium to large</td></tr>
+</table>
+</div>
+
+<div class="panel" style="margin-top:24px">
+  <h3 style="margin-top:0">Recommendation: Option A</h3>
+  <p>A puts the numbers most users need (grams and macros) in the list, and keeps per-100 g values one tap away. The balance panel next to Log meal answers “does this fit my day?” at the moment of decision. It also keeps the current calm look and native list parts. If you check labels on most meals, B is the better choice.</p>
+  <h3>Rules for all options</h3>
+  <ol>
+    <li>Saved meals (<code>macroBasis = .perOriginal</code>) have no per-100 g values. Show a “Per serving (X g)” column for them.</li>
+    <li>A changed per-100 g value marks the food as “Edited”. A new AI estimate must not overwrite it without a warning.</li>
+    <li>The balance uses the target of the logger's date, not today, when the user logs a past day.</li>
+    <li>Calories do not recalculate from protein, carbs and fat. Each value is stored as entered.</li>
+    <li>Log meal stays blocked for invalid grams, as now (<code>AnalyzeGate.logBlockReason</code>).</li>
+  </ol>
+  <h3>Decisions for you</h3>
+  <ol>
+    <li>Which option: A, B or C?</li>
+    <li>Allow editing per-100 g values for AI estimates, or only for label and saved foods?</li>
+    <li>Send a photo to estimation right away, or keep the step to add text first?</li>
+  </ol>
+</div>
+
+</main>
+
+<script>
+const DAY = { goal: { kcal: 2100, p: 140, c: 220, f: 70 }, eaten: { kcal: 1240, p: 78, c: 131, f: 41 } };
+const M = ['kcal', 'p', 'c', 'f'];
+const NAMES = { kcal: 'Calories', p: 'Protein', c: 'Carbs', f: 'Fat' };
+const seed = () => [
+  { name: 'Chicken breast', src: 'Photo estimate', grams: 150, per100: { kcal: 165, p: 31, c: 0, f: 3.6 }, flag: 'Preparation not specified' },
+  { name: 'Cooked white rice', src: 'Photo estimate', grams: 180, per100: { kcal: 130, p: 2.7, c: 28, f: 0.3 } },
+  { name: 'Greek yogurt 2%', src: 'Nutrition label', grams: 170, per100: { kcal: 73, p: 9.9, c: 3.9, f: 2 } },
+];
+const state = { optA: seed(), optB: seed(), optC: seed() };
+
+const fmt = v => { if (!isFinite(v)) return '0'; if (Math.abs(v) >= 100) return String(Math.round(v)); const r = Math.round(v * 10) / 10; return r % 1 === 0 ? r.toFixed(0) : r.toFixed(1); };
+const val = (m, v) => m === 'kcal' ? String(Math.round(v)) : fmt(v);
+const portion = f => Object.fromEntries(M.map(m => [m, f.per100[m] * f.grams / 100]));
+const totals = foods => Object.fromEntries(M.map(m => [m, foods.reduce((s, f) => s + portion(f)[m], 0)]));
+const num = s => { const v = parseFloat(String(s).replace(',', '.')); return isNaN(v) ? 0 : Math.max(0, v); };
+
+const ic = {
+  x: '<svg class="i" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+  more: '<svg class="i" viewBox="0 0 24 24" style="fill:currentColor;stroke:none"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>',
+  down: '<svg class="i s chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>',
+  right: '<svg class="i s" viewBox="0 0 24 24" style="color:var(--sec)"><path d="M9 6l6 6-6 6"/></svg>',
+  plus: '<svg class="i s" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>',
+  minus: '<svg class="i s" viewBox="0 0 24 24"><path d="M5 12h14"/></svg>',
+};
+const chrome = (title, sub) => `
+  <div class="status"><span>9:41</span><span class="island"></span><span class="bat"></span></div>
+  <div class="nav"><button class="glass x">${ic.x}</button><div class="t">${title}<small>${sub}</small></div><button class="glass">${ic.more}</button></div>`;
+const out = (k, i, m) => `<span class="num" data-out="${k}"${i !== null ? ` data-i="${i}"` : ''}${m ? ` data-m="${m}"` : ''}></span>`;
+const bar = m => `<div class="bar c-${m}" data-bar="${m}"><div class="e"></div><div class="n"></div><div class="tick"></div></div>`;
+const gfield = i => `<label class="gfield"><input class="fld" inputmode="decimal" data-in="grams" data-i="${i}" aria-label="Grams">g</label>`;
+const macroLine = i => `<span><i class="dot d-p"></i><b>${out('portion', i, 'p')}</b></span><span><i class="dot d-c"></i><b>${out('portion', i, 'c')}</b></span><span><i class="dot d-f"></i><b>${out('portion', i, 'f')}</b> g</span>`;
+
+/* ---------- Option A ---------- */
+function buildA(foods) {
+  const rows = foods.map((f, i) => `
+    <div class="a-row${i === 0 ? ' open' : ''}">
+      <div class="a-r1" data-toggle><span class="n">${f.name}</span><span class="k">${out('portion', i, 'kcal')} kcal</span></div>
+      <div class="a-r2">
+        <div class="a-macros" data-toggle>${macroLine(i)}${ic.down}</div>
+        ${gfield(i)}
+      </div>
+      ${f.flag ? `<div class="flag">${f.flag}</div>` : ''}
+      <div class="a-x">
+        <div class="ntable">
+          <span class="src">${f.src}</span><span class="h">Per 100 g</span><span class="h">${out('grams', i)} g</span>
+          ${M.map(m => `<span>${NAMES[m]}</span><input class="fld" inputmode="decimal" data-in="p100" data-i="${i}" data-m="${m}"><span class="v">${out('portion', i, m)}${m === 'kcal' ? '' : ' g'}</span>`).join('')}
+        </div>
+        <div class="a-tools">
+          <button class="chip" data-step="-10" data-i="${i}">−10 g</button>
+          <button class="chip" data-step="10" data-i="${i}">+10 g</button>
+          <button class="chip" data-set="100" data-i="${i}">100 g</button>
+          <span style="flex:1"></span>
+          <button class="danger-link">Remove</button>
+        </div>
+        ${f.flag ? `<div class="a-prep"><span style="color:var(--sec)">Weighed raw or cooked? Optional, updates the estimate.</span>
+          <div class="seg" data-segv><button>Raw</button><button>Cooked</button></div></div>` : ''}
+      </div>
+    </div>`).join('');
+  return chrome('Review meal', 'Today') + `
+    <div class="content">
+      <div class="group">${rows}</div>
+      <div class="group" style="margin-top:12px;padding:13px 16px"><button class="link" style="display:flex;gap:8px;align-items:center">${ic.plus} Add food</button></div>
+    </div>
+    <div class="footer">
+      <div class="impact-h"><span>Today after this meal</span><b class="num">${out('left', null, 'kcal')}</b></div>
+      <div style="margin-top:8px">${bar('kcal')}</div>
+      <div class="mini">
+        ${['p', 'c', 'f'].map(m => `<div><div class="l"><span>${NAMES[m]}</span>${out('left', null, m)}</div>${bar(m)}</div>`).join('')}
+      </div>
+      <button class="btn">Log meal · <span data-out="meal" data-m="kcal"></span> kcal</button>
+    </div>`;
+}
+
+/* ---------- Option B ---------- */
+function buildB(foods) {
+  const cards = foods.map((f, i) => `
+    <div class="b-card">
+      <div class="b-head">
+        <div><div class="n">${f.name}</div><div class="src">${f.src}</div></div>
+        <div class="stepper"><button class="round" data-step="-10" data-i="${i}">${ic.minus}</button>${gfield(i)}<button class="round" data-step="10" data-i="${i}">${ic.plus}</button></div>
+      </div>
+      <div class="b-grid">
+        <span></span>${M.map(m => `<span class="h">${m === 'kcal' ? 'kcal' : NAMES[m]}</span>`).join('')}
+        <span class="rl">100 g</span>${M.map(m => `<input class="fld" inputmode="decimal" data-in="p100" data-i="${i}" data-m="${m}">`).join('')}
+        <span class="rl" style="color:var(--ink);font-weight:600">${out('grams', i)} g</span>${M.map(m => `<span class="v">${out('portion', i, m)}</span>`).join('')}
+      </div>
+      ${f.flag ? `<div class="flag">${f.flag} · <button class="link" style="font-size:14px">Answer</button></div>` : ''}
+    </div>`).join('');
+  return chrome('Review meal', 'Today') + `
+    <div class="content">
+      <div class="b-impact">
+        <div class="impact-h"><span>Left today after this meal</span></div>
+        <div class="cols">
+          ${M.map(m => `<div><div class="lab"><i class="dot d-${m === 'kcal' ? 'k' : m}"></i>${NAMES[m]}</div><div class="big num" data-out="leftnum" data-m="${m}"></div><div class="w"><span data-out="leftword" data-m="${m}"></span></div><div style="margin-top:6px">${bar(m)}</div></div>`).join('')}
+        </div>
+      </div>
+      ${cards}
+      <div class="b-total"><span>Meal total</span><span><b>${out('meal', null, 'kcal')} kcal</b> · P ${out('meal', null, 'p')} · C ${out('meal', null, 'c')} · F ${out('meal', null, 'f')} g</span></div>
+      <div class="group" style="margin-top:12px;padding:13px 16px"><button class="link" style="display:flex;gap:8px;align-items:center">${ic.plus} Add food</button></div>
+    </div>
+    <div class="footer"><button class="btn">Log meal · <span data-out="meal" data-m="kcal"></span> kcal</button></div>`;
+}
+
+/* ---------- Option C ---------- */
+const R = 48, CIRC = 2 * Math.PI * R;
+function buildC(foods) {
+  const rows = foods.map((f, i) => `
+    <div class="c-row" data-open="${i}">
+      <div class="body"><div class="n">${f.name}</div>
+        <div class="m"><i class="dot d-p"></i>${out('portion', i, 'p')} · <i class="dot d-c"></i>${out('portion', i, 'c')} · <i class="dot d-f"></i>${out('portion', i, 'f')} g</div>
+        ${f.flag ? `<div class="flag" style="font-size:13px;margin-top:4px">${f.flag}</div>` : ''}</div>
+      <div class="k">${out('portion', i, 'kcal')} kcal<small>${out('grams', i)} g</small></div>${ic.right}
+    </div>`).join('');
+  return chrome('Review meal', 'Today') + `
+    <div class="content">
+      <div class="c-head">
+        <div class="ring">
+          <svg viewBox="0 0 112 112"><circle cx="56" cy="56" r="${R}" fill="none" stroke="var(--track)" stroke-width="10"/>
+            <circle data-ring="e" cx="56" cy="56" r="${R}" fill="none" stroke="var(--brand)" stroke-width="10" stroke-linecap="round"/>
+            <circle data-ring="n" cx="56" cy="56" r="${R}" fill="none" stroke="color-mix(in srgb, var(--brand) 40%, white)" stroke-width="10"/></svg>
+          <div class="mid"><b class="num rounded" data-out="leftnum" data-m="kcal"></b><span><span data-out="leftword" data-m="kcal"></span> kcal</span></div>
+        </div>
+        <div class="c-bars">
+          ${['p', 'c', 'f'].map(m => `<div><div class="l"><span>${NAMES[m]}</span>${out('left', null, m)}</div>${bar(m)}</div>`).join('')}
+        </div>
+      </div>
+      <div class="c-cap">Today after this meal. Striped = this meal, <span data-out="meal" data-m="kcal"></span> kcal.</div>
+      <div class="sec-h">Foods</div>
+      <div class="group">${rows}</div>
+      <div class="group" style="margin-top:12px;padding:13px 16px"><button class="link" style="display:flex;gap:8px;align-items:center">${ic.plus} Add food</button></div>
+      <div style="height:300px"></div>
+    </div>
+    <div class="footer"><button class="btn">Log meal · <span data-out="meal" data-m="kcal"></span> kcal</button></div>
+    <div class="sheet" data-sheet></div>`;
+}
+function sheetC(root, i, mode) {
+  const f = state.optC[i], sh = root.querySelector('[data-sheet]');
+  root.querySelectorAll('.c-row').forEach((r, j) => r.classList.toggle('sel', j === i));
+  sh.dataset.i = i; sh.dataset.mode = mode;
+  const key = mode === 'p100' ? 'p100' : 'pp';
+  sh.innerHTML = `<div class="grab"></div>
+    <div class="sh-top"><div><div class="n">${f.name}</div><div class="src">${f.src}</div></div><button class="link" style="font-weight:600" data-close>Done</button></div>
+    <div class="sh-g"><button class="round" data-step="-10" data-i="${i}">${ic.minus}</button>${gfield(i)}<button class="round" data-step="10" data-i="${i}">${ic.plus}</button></div>
+    <div class="chips">${[50, 100, 150, 200, 250].map(g => `<button class="chip" data-set="${g}" data-i="${i}">${g} g</button>`).join('')}</div>
+    <div class="seg" style="margin-top:14px" data-mode><button data-mode-v="p100" class="${mode === 'p100' ? 'on' : ''}">Per 100 g</button><button data-mode-v="pp" class="${mode === 'pp' ? 'on' : ''}">This portion</button></div>
+    <div class="sh-rows">${M.map(m => `<span><i class="dot d-${m === 'kcal' ? 'k' : m}"></i>${NAMES[m]}${m === 'kcal' ? '' : ' (g)'}</span><input class="fld" inputmode="decimal" data-in="${key}" data-i="${i}" data-m="${m}">`).join('')}</div>`;
+  sh.classList.remove('closed');
+  update(root);
+}
+
+/* ---------- Shared update ---------- */
+function update(root) {
+  const foods = state[root.id], meal = totals(foods);
+  const left = m => DAY.goal[m] - DAY.eaten[m] - meal[m];
+  root.querySelectorAll('[data-out]').forEach(el => {
+    const k = el.dataset.out, i = +el.dataset.i, m = el.dataset.m;
+    if (k === 'portion') el.textContent = val(m, portion(foods[i])[m]);
+    else if (k === 'grams') el.textContent = fmt(foods[i].grams);
+    else if (k === 'meal') el.textContent = val(m, meal[m]);
+    else if (k === 'left') { const l = left(m); el.textContent = `${val(m, Math.abs(l))}${m === 'kcal' ? ' kcal' : ' g'} ${l < 0 ? 'over' : 'left'}`; el.classList.toggle('over', l < 0); }
+    else if (k === 'leftnum') { const l = left(m); el.textContent = val(m, Math.abs(l)) + (m === 'kcal' ? '' : ' g'); el.classList.toggle('over', l < 0); }
+    else if (k === 'leftword') { const l = left(m); el.textContent = l < 0 ? 'over' : 'left'; el.classList.toggle('over', l < 0); }
+  });
+  root.querySelectorAll('[data-bar]').forEach(b => {
+    const m = b.dataset.bar, g = DAY.goal[m], e = DAY.eaten[m], scale = Math.max(g, e + meal[m]);
+    b.querySelector('.e').style.width = e / scale * 100 + '%';
+    b.querySelector('.n').style.width = meal[m] / scale * 100 + '%';
+    b.querySelector('.tick').style.left = `calc(${g / scale * 100}% - 1px)`;
+    b.classList.toggle('over', e + meal[m] > g);
+  });
+  const re = root.querySelector('[data-ring="e"]'), rn = root.querySelector('[data-ring="n"]');
+  if (re) {
+    const g = DAY.goal.kcal, e = Math.min(DAY.eaten.kcal / g, 1), n = Math.max(0, Math.min(meal.kcal / g, 1 - e));
+    re.setAttribute('stroke-dasharray', `${e * CIRC} ${CIRC}`);
+    rn.setAttribute('stroke-dasharray', `${n * CIRC} ${CIRC}`);
+    rn.setAttribute('stroke-dashoffset', -e * CIRC);
+    rn.setAttribute('stroke', DAY.eaten.kcal + meal.kcal > g ? 'var(--danger)' : 'color-mix(in srgb, var(--brand) 40%, white)');
+  }
+  root.querySelectorAll('input[data-in]').forEach(el => {
+    if (el === document.activeElement) return;
+    const f = foods[+el.dataset.i], m = el.dataset.m;
+    if (el.dataset.in === 'grams') el.value = fmt(f.grams);
+    else if (el.dataset.in === 'p100') el.value = fmt(f.per100[m]);
+    else el.value = val(m, portion(f)[m]);
+  });
+}
+
+function wire(root, build) {
+  root.innerHTML = build(state[root.id]);
+  root.addEventListener('input', e => {
+    const t = e.target, f = state[root.id][+t.dataset.i]; if (!f) return;
+    const v = num(t.value), m = t.dataset.m;
+    if (t.dataset.in === 'grams') f.grams = Math.min(v, 5000);
+    else if (t.dataset.in === 'p100') f.per100[m] = v;
+    else if (t.dataset.in === 'pp') f.per100[m] = f.grams > 0 ? v * 100 / f.grams : 0;
+    update(root);
+  });
+  root.addEventListener('focusout', () => setTimeout(() => update(root)));
+  root.addEventListener('click', e => {
+    const t = e.target.closest('button, [data-toggle], [data-open]'); if (!t || e.target.closest('input')) return;
+    const f = state[root.id][+t.dataset.i];
+    if (t.dataset.step && f) { f.grams = Math.max(0, f.grams + +t.dataset.step); update(root); }
+    else if (t.dataset.set && f) { f.grams = +t.dataset.set; update(root); }
+    else if (t.hasAttribute('data-toggle')) {
+      const row = t.closest('.a-row'), open = row.classList.contains('open');
+      root.querySelectorAll('.a-row').forEach(r => r.classList.remove('open'));
+      row.classList.toggle('open', !open);
+    }
+    else if (t.closest('[data-segv]')) t.parentElement.querySelectorAll('button').forEach(b => b.classList.toggle('on', b === t));
+    else if (t.dataset.open) sheetC(root, +t.dataset.open, 'p100');
+    else if (t.hasAttribute('data-close')) { root.querySelector('[data-sheet]').classList.add('closed'); root.querySelectorAll('.c-row').forEach(r => r.classList.remove('sel')); }
+    else if (t.dataset.modeV) sheetC(root, +root.querySelector('[data-sheet]').dataset.i, t.dataset.modeV);
+  });
+  update(root);
+}
+
+wire(document.getElementById('optA'), buildA);
+wire(document.getElementById('optB'), buildB);
+const c = document.getElementById('optC');
+wire(c, buildC);
+sheetC(c, 0, 'p100');
+</script>
+</body>
+</html>

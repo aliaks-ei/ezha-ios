@@ -4,7 +4,6 @@ import SwiftUI
 enum LoggerDestination: Hashable {
   case portion(UUID)
   case food(UUID)
-  case nutrition
 }
 
 extension LogItem {
@@ -18,13 +17,23 @@ extension LogItem {
   var hasUnspecifiedPreparation: Bool {
     name.lowercased().hasSuffix(", preparation unspecified")
   }
+
+  /// Nutrition per 100 g, whatever basis the item is stored in.
+  var per100g: MacroTotals {
+    macroBasis == .per100g ? base : base.scaled(by: 100 / (baseGrams > 0 ? baseGrams : 1))
+  }
 }
 
+/// One food in review: calories, macros and grams. Expanded, it shows editable per-100 g values.
 struct LoggerReviewItem: View {
   var model: LoggerModel
   var item: LogItem
   var index: Int
-  var compact = false
+  var isExpanded: Bool
+  var onToggle: () -> Void
+  @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+  @State private var committedGrams: String?
+  @State private var isRemovePresented = false
 
   private var reviewLabel: String? {
     if item.hasUnspecifiedPreparation { return String(localized: "Preparation not specified") }
@@ -36,69 +45,236 @@ struct LoggerReviewItem: View {
     }
   }
 
+  private var sourceLabel: String {
+    switch item.origin {
+    case .ai:
+      model.state.aiItemsFromLabel
+        ? String(localized: "From label") : String(localized: "Estimate")
+    case .libraryFood: String(localized: "Saved food")
+    case .libraryMeal: String(localized: "Saved meal")
+    }
+  }
+
   var body: some View {
-    VStack(alignment: .leading, spacing: compact ? 12 : 24) {
-      HStack(alignment: .firstTextBaseline, spacing: 16) {
-        Text(item.loggerDisplayName)
-          .font(.title2.weight(.semibold))
-          .frame(maxWidth: .infinity, alignment: .leading)
-        if model.state.items.count > 1 {
-          KcalText(value: LogItemMath.macros(item).calories)
-            .font(.subheadline.weight(.semibold))
-        }
-      }
-      NavigationLink(value: LoggerDestination.portion(item.id)) {
+    let macros = LogItemMath.macros(item)
+    VStack(alignment: .leading, spacing: 8) {
+      Button(action: onToggle) {
         VStack(alignment: .leading, spacing: 4) {
-          HStack(spacing: 16) {
-            Text("\(item.gramsText) g")
-              .font(.title3.weight(.medium))
-              .foregroundStyle(.primary)
-              .monospacedDigit()
-            Image(systemName: "pencil").foregroundStyle(Color.brandPrimary)
+          HStack(alignment: .firstTextBaseline, spacing: 12) {
+            Text(item.loggerDisplayName)
+              .font(.headline)
+              .frame(maxWidth: .infinity, alignment: .leading)
+            KcalText(value: macros.calories).font(.headline)
           }
-          if !compact {
-            Text("Edit portion")
-              .font(.subheadline)
-              .foregroundStyle(Color.ink.opacity(0.7))
+          HStack(spacing: 6) {
+            MacroLine(macros: macros)
+            Image(systemName: "chevron.down")
+              .font(.caption.weight(.semibold))
+              .rotationEffect(.degrees(isExpanded ? 180 : 0))
+              .accessibilityHidden(true)
           }
+          .font(.subheadline)
+          .foregroundStyle(.secondary)
         }
-        .frame(minHeight: 44, alignment: .leading)
+        .frame(minHeight: 44)
         .contentShape(.rect)
       }
       .buttonStyle(.plain)
-      .accessibilityLabel("Edit portion for \(item.loggerDisplayName)")
-      .accessibilityValue("\(item.gramsText) grams")
-      .accessibilityIdentifier("editPortion\(index)")
+      .accessibilityIdentifier("foodRow\(index)")
+      .accessibilityHint(
+        isExpanded ? "Hides nutrition per 100 grams" : "Shows nutrition per 100 grams")
 
-      VStack(spacing: 0) {
-        Divider()
+      let stacked = dynamicTypeSize.isAccessibilitySize
+      (stacked ? AnyLayout(VStackLayout(alignment: .leading)) : AnyLayout(HStackLayout())) {
+        Text("Portion")
+        if !stacked { Spacer() }
+        GramsField(
+          text: Binding(get: { item.gramsText }, set: { model.setGrams(item.id, $0) }),
+          onStep: step, onFocusLost: commitGrams)
+      }
+
+      if let reviewLabel {
         NavigationLink(value: LoggerDestination.food(item.id)) {
           HStack(spacing: 12) {
-            Text(reviewLabel ?? String(localized: "Adjust food"))
+            Text(reviewLabel)
+              .font(.subheadline)
               .foregroundStyle(.primary)
               .frame(maxWidth: .infinity, alignment: .leading)
-            if reviewLabel != nil {
-              Text("Adjust")
-                .foregroundStyle(Color.brandPrimary)
-                .fixedSize(horizontal: true, vertical: false)
-            }
+            Text("Adjust")
+              .font(.subheadline)
+              .foregroundStyle(Color.brandPrimary)
             Image(systemName: "chevron.right")
-              .font(.subheadline.weight(.semibold))
+              .font(.footnote.weight(.semibold))
               .foregroundStyle(.secondary)
           }
-          .frame(minHeight: compact ? 44 : 56)
-          .padding(.vertical, compact ? 0 : 4)
+          .frame(minHeight: 44)
           .contentShape(.rect)
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("adjustFood\(index)")
       }
+
       if item.isNutritionMissing {
         Text("Nutrition is missing. Remove this food to log the rest of your meal.")
           .font(.subheadline)
           .foregroundStyle(Color.danger)
       }
+
+      if isExpanded {
+        if !item.isNutritionMissing {
+          if stacked {
+            stackedNutrition(macros)
+          } else {
+            nutritionTable(macros).padding(.top, 4)
+          }
+        }
+        HStack {
+          if item.origin == .ai && reviewLabel == nil {
+            NavigationLink("Adjust estimate", value: LoggerDestination.food(item.id))
+              .accessibilityIdentifier("adjustFood\(index)")
+          }
+          Spacer()
+          Button("Remove", role: .destructive) { isRemovePresented = true }
+            .accessibilityIdentifier("removeFood\(index)")
+        }
+        .font(.subheadline)
+        .buttonStyle(.borderless)
+        .frame(minHeight: 44)
+      }
     }
+    .onAppear { committedGrams = item.gramsText }
+    .confirmationDialog(
+      "Remove this food?", isPresented: $isRemovePresented, titleVisibility: .visible
+    ) {
+      Button("Remove food", role: .destructive) { model.removeItem(item.id) }
+    }
+  }
+
+  private func nutritionTable(_ macros: MacroTotals) -> some View {
+    let per100g = item.per100g
+    return Grid(alignment: .trailing, horizontalSpacing: 16, verticalSpacing: 8) {
+      GridRow {
+        Text(sourceLabel)
+          .frame(maxWidth: .infinity, alignment: .leading)
+          .gridColumnAlignment(.leading)
+        Text("Per 100 g")
+        Text("\(item.gramsText) g")
+      }
+      .font(.footnote)
+      .foregroundStyle(.secondary)
+      row("Calories", "calories", \.calories, per100g, portion: KcalText(value: macros.calories))
+      row("Protein", "protein", \.protein, per100g, portion: GramsText(value: macros.protein))
+      row("Carbs", "carbs", \.carbs, per100g, portion: GramsText(value: macros.carbs))
+      row("Fat", "fat", \.fat, per100g, portion: GramsText(value: macros.fat))
+    }
+  }
+
+  /// Accessibility text sizes: one macro per block, the per-100 g field above the portion value.
+  private func stackedNutrition(_ macros: MacroTotals) -> some View {
+    let per100g = item.per100g
+    let rows: [(LocalizedStringKey, String, WritableKeyPath<MacroTotals, Double>, String)] = [
+      ("Calories", "calories", \.calories, "\(Macros.format(macros.calories, maxFractionDigits: 0)) kcal"),
+      ("Protein", "protein", \.protein, "\(Macros.format(macros.protein, maxFractionDigits: 1)) g"),
+      ("Carbs", "carbs", \.carbs, "\(Macros.format(macros.carbs, maxFractionDigits: 1)) g"),
+      ("Fat", "fat", \.fat, "\(Macros.format(macros.fat, maxFractionDigits: 1)) g"),
+    ]
+    return VStack(alignment: .leading, spacing: 12) {
+      Text(sourceLabel).font(.footnote).foregroundStyle(.secondary)
+      ForEach(rows, id: \.1) { title, id, keyPath, portion in
+        VStack(alignment: .leading, spacing: 4) {
+          Text(title)
+          HStack {
+            Per100gField(title: title, value: per100g[keyPath: keyPath]) {
+              model.setPer100g(item.id, keyPath, $0)
+            }
+            .accessibilityIdentifier("per100g-\(id)\(index)")
+            Text("per 100 g").foregroundStyle(.secondary)
+          }
+          Text("\(portion) in \(item.gramsText) g")
+            .fontWeight(.semibold)
+            .fontDesign(.rounded)
+            .monospacedDigit()
+        }
+      }
+    }
+  }
+
+  private func row(
+    _ title: LocalizedStringKey, _ id: String, _ keyPath: WritableKeyPath<MacroTotals, Double>,
+    _ per100g: MacroTotals, portion: some View
+  ) -> some View {
+    GridRow {
+      Text(title).gridColumnAlignment(.leading)
+      Per100gField(title: title, value: per100g[keyPath: keyPath]) {
+        model.setPer100g(item.id, keyPath, $0)
+      }
+      .accessibilityIdentifier("per100g-\(id)\(index)")
+      portion.fontWeight(.semibold)
+    }
+  }
+
+  private func step(_ delta: Double) {
+    model.step(item.id, by: delta)
+    if model.state.reviewItemId == item.id && model.state.review?.kind == "portion" {
+      model.confirmReviewPortion()
+    }
+  }
+
+  /// A typed weight confirms a portion question and is kept as context for later estimates.
+  private func commitGrams() {
+    model.gramsFocusLost(item.id)
+    guard let grams = model.state.items.first(where: { $0.id == item.id })?.gramsText,
+      grams != committedGrams
+    else { return }
+    if model.updatePortion(item.id, grams: grams) { committedGrams = grams }
+  }
+}
+
+/// "46.5 g"
+private struct GramsText: View {
+  var value: Double
+
+  var body: some View {
+    Text("\(Macros.format(value, maxFractionDigits: 1)) g")
+      .fontDesign(.rounded)
+      .monospacedDigit()
+  }
+}
+
+/// A per-100 g value. Only typing changes the item, so showing the field never rewrites it.
+private struct Per100gField: View {
+  var title: LocalizedStringKey
+  var value: Double
+  var onChange: (Double) -> Void
+  @State private var text = ""
+  @FocusState private var isFocused: Bool
+  @ScaledMetric private var width: CGFloat = 56
+
+  var body: some View {
+    TextField(title, text: $text, prompt: Text(verbatim: "0"))
+      .keyboardType(.decimalPad)
+      .multilineTextAlignment(.trailing)
+      .fontDesign(.rounded)
+      .monospacedDigit()
+      .focused($isFocused)
+      .frame(width: width)
+      .padding(.vertical, 6)
+      .padding(.horizontal, 8)
+      .background(Color.canvas, in: .rect(cornerRadius: 8))
+      // The whole tinted box focuses the field, not only the text.
+      .contentShape(.rect)
+      .onTapGesture { isFocused = true }
+      .onAppear { text = Macros.format(value, maxFractionDigits: 1) }
+      .onChange(of: value) { _, value in
+        if !isFocused { text = Macros.format(value, maxFractionDigits: 1) }
+      }
+      .onChange(of: text) { _, text in
+        guard isFocused, let parsed = parseNumberInput(text) else { return }
+        onChange(parsed)
+      }
+      .onChange(of: isFocused) { _, focused in
+        if !focused { text = Macros.format(value, maxFractionDigits: 1) }
+      }
   }
 }
 
@@ -282,62 +458,6 @@ struct LoggerFoodEditor: View {
       answer.wrappedValue = text
     } label: {
       Text(title).frame(maxWidth: .infinity, minHeight: 44)
-    }
-  }
-}
-
-struct LoggerNutritionDetails: View {
-  @Bindable var model: LoggerModel
-  var editDescription: () -> Void
-  @Environment(\.dismiss) private var dismiss
-  @State private var labelFields = MacroFieldsModel()
-
-  var body: some View {
-    List {
-      Section(model.hasAIItems ? "Estimated meal nutrition" : "Meal nutrition") {
-        LabeledContent("Calories") { KcalText(value: model.totals.calories) }
-        LabeledContent("Protein", value: "\(Macros.format(model.totals.protein)) g")
-        LabeledContent("Carbs", value: "\(Macros.format(model.totals.carbs)) g")
-        LabeledContent("Fat", value: "\(Macros.format(model.totals.fat)) g")
-      }
-      ForEach(model.state.items) { item in
-        Section(item.loggerDisplayName) {
-          NavigationLink(value: LoggerDestination.food(item.id)) {
-            LabeledContent("Portion", value: "\(item.gramsText) g")
-          }
-          if !item.aiNotes.isEmpty {
-            Text(item.aiNotes).font(.subheadline)
-          }
-        }
-      }
-      if model.showsLabelOverrides {
-        Section("Label values for this portion") {
-          MacroFields(model: $labelFields)
-          Button("Apply label values") {
-            if let values = labelFields.values { model.applyLabelOverride(values) }
-          }
-          .disabled(labelFields.values == nil)
-        }
-      }
-      if !model.state.text.isEmpty || model.imageData != nil {
-        Section("Meal input") {
-          if !model.state.text.isEmpty { Text(model.state.text).font(.subheadline) }
-          Button("Edit description") {
-            editDescription()
-            dismiss()
-          }
-        }
-      }
-    }
-    .navigationTitle("Nutrition details")
-    .navigationBarTitleDisplayMode(.inline)
-    .onAppear { syncLabelFields() }
-    .onChange(of: model.state.items) { _, _ in syncLabelFields() }
-  }
-
-  private func syncLabelFields() {
-    if let values = model.labelDisplayMacros {
-      labelFields = MacroFieldsModel(values: values.rounded)
     }
   }
 }
