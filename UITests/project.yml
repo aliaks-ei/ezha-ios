@@ -36,10 +36,12 @@ targets:
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
         INFOPLIST_KEY_NSPhotoLibraryUsageDescription: Verify meal-photo entry
         INFOPLIST_KEY_NSCameraUsageDescription: Verify meal entry
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
+        "INFOPLIST_KEY_UISupportedInterfaceOrientations~ipad": "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
   EZHAUITests:
     type: bundle.ui-testing
     platform: iOS
-    sources: [LoggerUITests.swift, LibraryUITests.swift, HarnessTestCase.swift]
+    sources: [LoggerUITests.swift, LibraryUITests.swift, AuditUITests.swift, UXImprovementUITests.swift, HarnessTestCase.swift]
     dependencies:
       - target: HarnessApp
     settings:

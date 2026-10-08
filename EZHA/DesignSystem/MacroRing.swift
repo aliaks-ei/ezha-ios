@@ -2,7 +2,7 @@ import EZHAKit
 import SwiftUI
 
 /// Calorie ring: brand gradient, "kcal left" or "kcal over" in the center.
-/// When over, the ring is full and a `Danger` glow pulses once.
+/// When over, the ring stays full and states the amount without an alarm effect.
 struct MacroRing: View {
   var goal: Double
   var eaten: Double
@@ -45,22 +45,12 @@ struct MacroRing: View {
           style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
         )
         .rotationEffect(.degrees(-90))
-      if status.isOver && !reduceMotion {
-        Circle()
-          .stroke(Color.danger, lineWidth: lineWidth / 2)
-          .padding(-lineWidth)
-          .phaseAnimator([0.0, 0.8, 0.0], trigger: status.isOver) { view, opacity in
-            view.opacity(opacity).blur(radius: lineWidth / 2)
-          } animation: { _ in
-            .easeInOut(duration: 0.6)
-          }
-      }
       VStack(spacing: 0) {
         Text(status.value, format: .number.precision(.fractionLength(0)))
           .font(.system(isCompact ? .title : .largeTitle, design: .rounded, weight: .bold))
           .monospacedDigit()
           .contentTransition(.numericText(value: status.value))
-          .foregroundStyle(status.isOver ? Color.danger : Color.primary)
+          .foregroundStyle(Color.primary)
           .minimumScaleFactor(0.5)
           .lineLimit(1)
         Text(status.isOver ? "kcal over" : "kcal left")

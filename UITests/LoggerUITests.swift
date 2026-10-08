@@ -23,6 +23,8 @@ final class LoggerUITests: HarnessTestCase {
   func testSingleFoodShowsNutritionAndDayBalance() {
     launch()
     XCTAssertEqual(app.buttons["loggerPrimary"].label, "Log meal")
+    XCTAssertFalse(per100g("calories").exists)
+    app.buttons["foodRow0"].tap()
     XCTAssertTrue(per100g("calories").waitForExistence(timeout: 5))
     XCTAssertEqual(per100g("calories").value as? String, "165")
     XCTAssertEqual(per100g("protein").value as? String, "31")
@@ -39,9 +41,11 @@ final class LoggerUITests: HarnessTestCase {
 
   func testGramsEditUpdatesTotalsInPlace() {
     launch()
-    app.buttons["plus"].firstMatch.tap()
+    app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Increase Portion'")).firstMatch
+      .tap()
     XCTAssertTrue(element("reviewTotal").label.contains("173 kcal"))
-    let grams = app.textFields["Grams"].firstMatch
+    let grams = app.textFields.matching(NSPredicate(format: "label BEGINSWITH 'Portion of'"))
+      .firstMatch
     replace(grams, with: "200")
     XCTAssertTrue(element("reviewTotal").label.contains("330 kcal"))
     capture("grams-keyboard")
@@ -52,6 +56,7 @@ final class LoggerUITests: HarnessTestCase {
 
   func testPer100gEditUpdatesPortion() {
     launch()
+    app.buttons["foodRow0"].tap()
     replace(per100g("calories"), with: "200")
     XCTAssertTrue(element("reviewTotal").label.contains("200 kcal"))
     hideKeyboard()
@@ -85,6 +90,7 @@ final class LoggerUITests: HarnessTestCase {
 
   func testLabelShowsPer100gValues() {
     launch("label")
+    app.buttons["foodRow0"].tap()
     XCTAssertTrue(per100g("calories").waitForExistence(timeout: 5))
     XCTAssertEqual(per100g("calories").value as? String, "442")
     XCTAssertTrue(app.staticTexts["From label"].exists)

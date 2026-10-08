@@ -14,6 +14,7 @@ struct SuggestionsView: View {
   @State private var isLoading = false
   @State private var errorMessage: String?
   @State private var refreshedAt = Date.now
+  @State private var hasRequested = false
   @State private var consentAction: (() -> Void)?
 
   private var date: DateKey { appModel.selectedDate }
@@ -54,6 +55,7 @@ struct SuggestionsView: View {
         refreshedAt = .now
       }
       .onChange(of: date) {
+        hasRequested = false
         suggestions = []
         errorMessage = nil
       }
@@ -148,14 +150,19 @@ struct SuggestionsView: View {
         let clamped = SuggestionRules.clampPrep(value)
         if clamped != value { prepMinutes = clamped }
       }
-      TextField(
-        "Notes", text: $notes,
-        prompt: Text("Restrictions or preferences, e.g. no peanuts, dairy-free"), axis: .vertical
-      )
-      .lineLimit(1...4)
+      VStack(alignment: .leading, spacing: 6) {
+        Text("Preferences (optional)").font(.subheadline.weight(.medium))
+        TextField("Preferences (optional)", text: $notes, axis: .vertical)
+          .lineLimit(1...4)
+          .frame(minHeight: 44)
+          .accessibilityLabel("Preferences (optional)")
+          .accessibilityIdentifier("suggestionPreferences")
+        Text("For example, no peanuts or dairy-free.")
+          .font(.footnote)
+          .foregroundStyle(.secondary)
+      }
     }
-    .padding()
-    .background(Color.surface, in: .rect(cornerRadius: 20, style: .continuous))
+    .padding(.vertical, 8)
   }
 
   private var actions: some View {
@@ -207,6 +214,11 @@ struct SuggestionsView: View {
       }
       .accessibilityLabel("Loading suggestions")
     } else if suggestions.isEmpty {
+      if hasRequested && errorMessage == nil {
+        Text("No ideas this time. Adjust your preferences or try again.")
+          .font(.subheadline)
+          .accessibilityIdentifier("suggestionsEmpty")
+      }
       howItWorks
     } else {
       ForEach(suggestions) { suggestion in
@@ -224,19 +236,16 @@ struct SuggestionsView: View {
   }
 
   private var howItWorks: some View {
-    VStack(alignment: .leading, spacing: 14) {
-      Text("How it works").font(.headline)
-      Label("We use what is left of your day's calories and macros.", systemImage: "chart.pie")
-      Label(
-        "Pick a meal or snack, the time you have, and any preferences.",
-        systemImage: "slider.horizontal.3")
-      Label("Get 3 ideas, then log one to estimate it in the logger.", systemImage: "sparkles")
+    DisclosureGroup("How it works") {
+      Text(
+        "We use your remaining calories and macros to suggest meals or snacks. Pick your prep time and preferences, then log an idea to estimate it in the logger."
+      )
+      .font(.subheadline)
+      .foregroundStyle(.secondary)
+      .padding(.top, 8)
     }
-    .font(.subheadline)
-    .foregroundStyle(.secondary)
-    .padding()
-    .frame(maxWidth: .infinity, alignment: .leading)
-    .background(Color.surface, in: .rect(cornerRadius: 20, style: .continuous))
+    .accessibilityIdentifier("suggestionsHelp")
+    .padding(.vertical, 8)
   }
 
   private func request(variation: String?) {
@@ -250,6 +259,7 @@ struct SuggestionsView: View {
   private func fetch(variation: String?) async {
     guard let remaining else { return }
     isLoading = true
+    hasRequested = true
     errorMessage = nil
     defer { isLoading = false }
     do {
@@ -269,7 +279,6 @@ struct SuggestionsView: View {
 
   private func logThis(_ suggestion: MealSuggestion) {
     appModel.loggerPrefill = SuggestionRules.loggerText(for: suggestion)
-    appModel.selectedTab = .today
     appModel.isLoggerRequested = true
   }
 }
@@ -288,7 +297,7 @@ private struct StatTile: View {
           .font(.title3.weight(.bold))
           .fontDesign(.rounded)
           .monospacedDigit()
-          .foregroundStyle(value < 0 ? Color.danger : Color.primary)
+          .foregroundStyle(Color.primary)
           .contentTransition(.numericText(value: value))
           .fixedSize()
         if let unit { Text(unit).font(.caption).foregroundStyle(.secondary) }
@@ -326,7 +335,7 @@ private struct SuggestionCard: View {
         .foregroundStyle(.secondary)
       if let warning = SuggestionRules.exceedWarning(suggestion.macros, remaining: remaining) {
         VStack(alignment: .leading, spacing: 2) {
-          Text(warning).foregroundStyle(Color.danger)
+          Text(warning).foregroundStyle(.secondary)
           Text(SuggestionRules.hint).foregroundStyle(.secondary)
         }
         .font(.footnote)

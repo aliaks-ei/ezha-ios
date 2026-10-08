@@ -17,15 +17,38 @@ struct HarnessApp: App {
     let scenario = env["HARNESS_SCENARIO"] ?? "review"
     self.scenario = scenario
     appearance = env["HARNESS_APPEARANCE"] == "dark" ? .dark : .light
-    size = env["HARNESS_LARGE_TEXT"] == "1" ? .accessibility3 : .large
+    size =
+      env["HARNESS_LARGE_TEXT"] == "1"
+      ? (env["HARNESS_TEXT_SIZE"] == "AX5" ? .accessibility5 : .accessibility3) : .large
     _app = State(initialValue: LoggerFixtures.app(scenario))
   }
 
   var body: some Scene {
     WindowGroup {
       Group {
-        if scenario == "today" {
+        if scenario == "today" || scenario == "todayOver" {
           TodayView(openLogger: { _ in })
+        } else if scenario == "shell" {
+          MainShell()
+        } else if scenario == "settings" {
+          SettingsView()
+        } else if scenario.hasPrefix("suggestions") {
+          SuggestionsView()
+        } else if scenario == "auth" {
+          AuthView()
+        } else if scenario == "onboarding" {
+          OnboardingView()
+        } else if scenario == "consent" {
+          NavigationStack {
+            AIConsentView(onAllow: {}, onDecline: {})
+              .navigationTitle("AI features")
+          }
+        } else if scenario == "addFood" {
+          AddFoodSheet()
+        } else if scenario == "foodEditor" {
+          FoodEditorSheet(food: PreviewData.foods[0])
+        } else if scenario == "mealEditor" {
+          MealEditorSheet(meal: PreviewData.foods[2])
         } else if scenario == "libraryTab" {
           LibraryView().overlay { ToastOverlay(toast: $app.toast) }
         } else {
@@ -43,17 +66,27 @@ struct HarnessApp: App {
     Button("Open logger") { presented = true }
       .overlay { ToastOverlay(toast: $app.toast) }
       .sheet(isPresented: $presented) {
-        LoggerView(date: LoggerFixtures.date)
+        LoggerView(date: LoggerFixtures.date, drafts: draftAccess)
           .environment(\.dynamicTypeSize, size)
       }
       .task {
         try? await app.sync.draftStore.save(
           LoggerFixtures.date,
-          state: JSONEncoder.ezha.encode(LoggerFixtures.state(scenario)), imageData: nil)
+          state: JSONEncoder.ezha.encode(LoggerFixtures.state(scenario)),
+          imageData: scenario == "photoDraft" ? LoggerFixtures.photo : nil)
         await app.dayStore.load(LoggerFixtures.date)
         presented = true
       }
   }
+  private var draftAccess: LoggerDraftAccess? {
+    guard scenario == "draftFailure" else { return nil }
+    let live = LoggerDraftAccess.live(app.sync.draftStore)
+    return LoggerDraftAccess(
+      load: live.load,
+      save: { _, _, _ in throw AIError.message("Storage unavailable") },
+      delete: live.delete)
+  }
+
 }
 
 enum Appearance: String, CaseIterable, Identifiable {

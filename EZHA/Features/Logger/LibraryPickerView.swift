@@ -8,12 +8,14 @@ struct LibraryPickerView: View {
   var onDescribe: (_ text: String) -> Void
   @Environment(AppModel.self) private var appModel
   @Environment(\.dismiss) private var dismiss
+  @Environment(\.dynamicTypeSize) private var dynamicTypeSize
   @State private var search = ""
   @State private var isSearchPresented = false
   @State private var filter = LibraryFilter.all
   @State private var selection: [(food: SavedFood, items: [LogItem])] = []
   @State private var loadingId: UUID?
   @State private var errorMessage: String?
+  @State private var isSelectionPresented = false
 
   private var store: LibraryStore { appModel.libraryStore }
   private var foods: [SavedFood] { filter.apply(to: store.foods, search: search) }
@@ -47,7 +49,11 @@ struct LibraryPickerView: View {
             }
             .accessibilityIdentifier("describeWithAI")
           } footer: {
-            Text("No saved item matches. AI can estimate it from the description.")
+            Text(
+              items.isEmpty
+                ? "No saved item matches. AI can estimate it from the description."
+                : "No saved item matches. AI will estimate this description and keep your selected foods."
+            )
           }
         }
       } else {
@@ -66,22 +72,63 @@ struct LibraryPickerView: View {
     }
     .searchable(text: $search, isPresented: $isSearchPresented, prompt: "Search foods and meals")
     .navigationTitle("Library")
-    // Add shares the bottom toolbar with search, so selecting does not resize the list and
-    // the section index stays in place. Open search replaces that toolbar, so Add moves
-    // above the field; the index is hidden then.
+    // Keep selected-item actions in the safe area on both iPhone and iPad, above the keyboard.
     .toolbar {
       DefaultToolbarItem(kind: .search, placement: .bottomBar)
-      if !items.isEmpty {
-        ToolbarSpacer(.fixed, placement: .bottomBar)
-        ToolbarItem(placement: .bottomBar) { addButton }
-      }
     }
     .safeAreaInset(edge: .bottom) {
-      if isSearchPresented && !items.isEmpty {
-        addButton.controlSize(.large).padding()
+      if !items.isEmpty {
+        HStack(spacing: 12) {
+          selectionButton
+          addButton
+        }
+        .controlSize(.large)
+        .padding()
+        .background(Color.surface)
+      }
+    }
+    .navigationDestination(isPresented: $isSelectionPresented) {
+      Group {
+        List {
+          ForEach(selection, id: \.food.id) { selected in
+            VStack(alignment: .leading, spacing: 8) {
+              Text(selected.food.name).font(.headline)
+              ForEach(selected.items) { item in
+                LabeledContent(item.name, value: "\(item.gramsText) g")
+              }
+              Button("Remove", role: .destructive) {
+                selection.removeAll { $0.food.id == selected.food.id }
+                if selection.isEmpty { isSelectionPresented = false }
+              }
+              .accessibilityLabel("Remove \(selected.food.name)")
+              .accessibilityIdentifier("removeSelection-\(selected.food.name)")
+              .frame(minHeight: 44)
+            }
+          }
+        }
+        .navigationTitle("Selected foods")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+          ToolbarItem(placement: .confirmationAction) {
+            Button("Done") { isSelectionPresented = false }
+          }
+        }
       }
     }
     .task { await store.load() }
+  }
+
+  private var selectionButton: some View {
+    Button {
+      isSelectionPresented = true
+    } label: {
+      Image(systemName: "list.bullet")
+        .frame(minWidth: 44, minHeight: 44)
+        .contentShape(.rect)
+    }
+    .buttonStyle(.plain)
+    .accessibilityLabel("Review selected foods")
+    .accessibilityIdentifier("reviewSelection")
   }
 
   private var addButton: some View {
@@ -89,13 +136,22 @@ struct LibraryPickerView: View {
       onAdd(items, selection.first?.food.name, selection.filter(\.food.isMeal).map(\.food.id))
       dismiss()
     } label: {
-      Text(
-        "Add ^[\(items.count) item](inflect: true) · \(LogItemMath.totals(items).calories, format: .number.precision(.fractionLength(0))) kcal"
-      )
+      Group {
+        if dynamicTypeSize.isAccessibilitySize {
+          Text("Add ^[\(items.count) item](inflect: true)")
+        } else {
+          Text(
+            "Add ^[\(items.count) item](inflect: true) · \(LogItemMath.totals(items).calories, format: .number.precision(.fractionLength(0))) kcal"
+          )
+        }
+      }
       .font(.headline)
       .monospacedDigit()
     }
     .buttonStyle(.glassProminent)
+    .accessibilityLabel(
+      "Add ^[\(items.count) item](inflect: true), \(LogItemMath.totals(items).calories, format: .number.precision(.fractionLength(0))) kcal"
+    )
     .accessibilityIdentifier("addSelected")
   }
 

@@ -20,7 +20,7 @@ struct MacroBar: View {
   private var remainingText: some View {
     let value = Text("\(abs(remaining), format: .number.precision(.fractionLength(0))) g")
       .fontWeight(.semibold)
-      .foregroundStyle(remaining < 0 ? Color.danger : Color.primary)
+      .foregroundStyle(Color.primary)
     let word = Text(remaining < 0 ? "over" : "left").foregroundStyle(.secondary)
     return Text("\(value) \(word)")
       .font(.subheadline)

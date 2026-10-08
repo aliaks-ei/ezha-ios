@@ -5,13 +5,14 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 DEVICE="${DEVICE:-EZHA iPhone 17 Pro}"
+DESTINATION="${DESTINATION:-platform=iOS Simulator,name=$DEVICE}"
 OUT="$PWD/.output"
 rm -rf "$OUT"
 mkdir -p "$OUT"
 xcodegen generate --quiet
 status=0
 xcodebuild test -project EZHAUITests.xcodeproj -scheme EZHAUITests \
-  -destination "platform=iOS Simulator,name=$DEVICE" \
+  -destination "$DESTINATION" \
   -derivedDataPath /tmp/ezha-uitests-dd -resultBundlePath "$OUT/result.xcresult" "$@" \
   > "$OUT/xcodebuild.log" 2>&1 || status=$?
 grep -E "error:|Test Case .*(passed|failed)|\*\* TEST" "$OUT/xcodebuild.log" | sed 's/^.*Test Case/Test Case/' || true

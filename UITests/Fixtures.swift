@@ -4,9 +4,14 @@ import Foundation
 enum LoggerFixtures {
   static let date = DateKey("2026-10-07")!
 
+  static let photo = Data(
+    base64Encoded:
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j4l8AAAAASUVORK5CYII="
+  )!
+
   static func state(_ scenario: String = "review") -> LoggerState {
     var state = LoggerState()
-    guard scenario != "entry" else { return state }
+    guard scenario != "entry", scenario != "slowEstimate" else { return state }
     if scenario == "library" {
       state.items = [
         LogItem(
@@ -45,6 +50,9 @@ enum LoggerFixtures {
       state.items[0].name = "Nutrition label"
       state.review = nil
       state.reviewItemId = nil
+    }
+    if scenario == "photoDraft" {
+      state.photoId = UUID().uuidString
     }
     return state
   }
@@ -103,7 +111,15 @@ enum LoggerFixtures {
     clients.ai = AIClient(
       estimateStream: { _ in
         AsyncThrowingStream { continuation in
-          if scenario == "failure" {
+          if scenario == "slowEstimate" {
+            let task = Task {
+              continuation.yield(.status("checking_details"))
+              try? await Task.sleep(for: .seconds(3))
+              continuation.yield(.result(estimate()))
+              continuation.finish()
+            }
+            continuation.onTermination = { _ in task.cancel() }
+          } else if scenario == "failure" {
             continuation.finish(
               throwing: AIError.message("Could not update the estimate. Try again."))
           } else {
@@ -111,7 +127,23 @@ enum LoggerFixtures {
             continuation.finish()
           }
         }
-      }, suggestions: { _ in [] })
+      },
+      suggestions: { _ in
+        if scenario == "suggestionsFailure" {
+          throw AIError.message("Could not get suggestions. Try again.")
+        }
+        if scenario == "suggestionsResults" { return PreviewData.suggestions }
+        if scenario == "suggestionsLoading" { try await Task.sleep(for: .seconds(3)) }
+        return []
+      })
+    if scenario == "todayOver" {
+      clients.day.fetchDay = { date in
+        var bundle = PreviewData.day
+        bundle.date = date
+        bundle.goals = MacroTotals(calories: 300, protein: 20, carbs: 40, fat: 10)
+        return bundle
+      }
+    }
     clients.library.list = { libraryFoods() }
     clients.library.ingredients = { _ in
       (1...12).map {

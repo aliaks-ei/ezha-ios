@@ -31,7 +31,7 @@ final class LibraryUITests: HarnessTestCase {
   func testLibraryShowsPinnedSectionsInOrderThenLetters() {
     launch("libraryTab")
     XCTAssertTrue(header(usualHeader).waitForExistence(timeout: 10))
-    let order = [usualHeader, "Favorites", "Recent", "A"].map { header($0).frame.minY }
+    let order = [usualHeader, "Favorites", "Recent"].map { header($0).frame.minY }
     XCTAssertEqual(order, order.sorted(), "sections out of order: \(order)")
     // Usual: most logged first. Each item shows once among the pinned sections.
     let usual = ["Greek yogurt", "Flat white", "Banana"]
@@ -39,6 +39,10 @@ final class LibraryUITests: HarnessTestCase {
     XCTAssertLessThan(
       app.staticTexts["Banana"].firstMatch.frame.maxY, header("Favorites").frame.minY)
     capture("library-light")
+    // A compact phone does not materialize the offscreen letter section yet.
+    if !header("A").exists { app.swipeUp() }
+    XCTAssertTrue(header("A").waitForExistence(timeout: 5))
+    capture("library-letters")
     launch("libraryTab", dark: true)
     XCTAssertTrue(header(usualHeader).waitForExistence(timeout: 10))
     capture("library-dark")

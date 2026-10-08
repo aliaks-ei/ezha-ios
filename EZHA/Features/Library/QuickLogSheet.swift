@@ -57,7 +57,10 @@ struct QuickLogSheet: View {
                 }
               },
               unit: food.isMeal ? "portions" : "g",
-              step: food.isMeal ? 0.5 : LogItemMath.stepGrams)
+              step: food.isMeal ? 0.5 : LogItemMath.stepGrams,
+              accessibilityName: food.isMeal
+                ? String(localized: "Portions of \(food.name)")
+                : String(localized: "Quantity of \(food.name) in grams"))
           }
           VStack(alignment: .leading, spacing: 4) {
             KcalText(value: totals.calories).font(.title3.bold())

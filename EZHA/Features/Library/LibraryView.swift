@@ -57,7 +57,8 @@ struct LibraryView: View {
       .navigationTitle("Library")
       .toolbar {
         ToolbarItem(placement: .topBarTrailing) {
-          Button("Add food", systemImage: "plus") { isAddPresented = true }
+          Button("Add to Library", systemImage: "square.and.pencil") { isAddPresented = true }
+            .accessibilityIdentifier("addToLibrary")
         }
       }
       .refreshable { await store.load() }

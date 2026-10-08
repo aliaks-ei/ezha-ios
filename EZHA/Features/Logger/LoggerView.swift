@@ -5,6 +5,7 @@ import SwiftUI
 /// The logger sheet for one date.
 struct LoggerView: View {
   var date: DateKey
+  var drafts: LoggerDraftAccess?
   @Environment(AppModel.self) private var appModel
   @State private var model: LoggerModel?
   @State private var isShortSheet = false
@@ -17,16 +18,22 @@ struct LoggerView: View {
         ProgressView()
       }
     }
-    .onGeometryChange(for: Bool.self) { $0.size.height < 700 } action: { isShortSheet = $0 }
+    .onGeometryChange(for: Bool.self) {
+      $0.size.height < 700
+    } action: {
+      isShortSheet = $0
+    }
     .task {
       guard model == nil else { return }
-      let model = LoggerModel(date: date, appModel: appModel)
+      let model = LoggerModel(date: date, appModel: appModel, drafts: drafts)
       await model.restore()
       self.model = model
     }
     // Swipe-down would discard the meal without asking, so it is off while there is input.
     .interactiveDismissDisabled(
-      model?.isEstimating == true || model?.isSaving == true || model?.hasInput == true)
+      model?.hasInput == true || model?.isSaving == true || model?.isClosing == true
+    )
+    .onDisappear { model?.stopBackgroundWork() }
   }
 }
 
@@ -48,7 +55,6 @@ private struct LoggerContent: View {
   @State private var isScannerPresented = false
   @State private var isLibraryPresented = false
   @State private var consentAction: (() -> Void)?
-  @State private var isClearConfirmPresented = false
   @State private var isDiscardConfirmPresented = false
   @State private var isEditingSource = false
   @FocusState private var isTextFocused: Bool
@@ -57,27 +63,45 @@ private struct LoggerContent: View {
   var body: some View {
     GeometryReader { geometry in
       let compact = geometry.size.height < 600
-      ScrollView {
-        VStack(alignment: .leading, spacing: 28) {
-          if let error = model.errorMessage {
-            Label(error, systemImage: "exclamationmark.triangle")
-              .foregroundStyle(Color.danger)
-              .font(.subheadline)
-              .accessibilityIdentifier("loggerError")
+      ScrollViewReader { scroll in
+        ScrollView {
+          VStack(alignment: .leading, spacing: 28) {
+            if let error = model.errorMessage {
+              Label(error, systemImage: "exclamationmark.triangle")
+                .foregroundStyle(Color.danger)
+                .font(.subheadline)
+                .accessibilityIdentifier("loggerError")
+            }
+            if isEntryVisible {
+              composer
+              provisionalSection
+            } else {
+              reviewContent(compact: compact)
+            }
           }
-          if isEntryVisible {
-            composer
-            provisionalSection
-          } else {
-            reviewContent(compact: compact)
+          .disabled(model.isSaving || model.isClosing)
+          .frame(maxWidth: 600, alignment: .leading)
+          .padding(.horizontal, 24)
+          .padding(.top, isEntryVisible ? 24 : compact ? 20 : 40)
+          .padding(.bottom, compact ? 12 : 24)
+          .frame(maxWidth: .infinity)
+        }
+        .onChange(of: isKeyboardVisible) { _, visible in
+          guard visible, isTextFocused, dynamicTypeSize.isAccessibilitySize else { return }
+          Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(250))
+            guard isTextFocused, isKeyboardVisible else { return }
+            scroll.scrollTo("composerInput", anchor: .bottom)
           }
         }
-        .disabled(model.isSaving)
-        .frame(maxWidth: 600, alignment: .leading)
-        .padding(.horizontal, 24)
-        .padding(.top, isEntryVisible ? 24 : compact ? 20 : 40)
-        .padding(.bottom, compact ? 12 : 24)
-        .frame(maxWidth: .infinity)
+        .task(id: model.state.text) {
+          guard isTextFocused, isKeyboardVisible, dynamicTypeSize.isAccessibilitySize else {
+            return
+          }
+          try? await Task.sleep(for: .milliseconds(100))
+          guard !Task.isCancelled, isTextFocused, isKeyboardVisible else { return }
+          scroll.scrollTo("composerInput", anchor: .bottom)
+        }
       }
     }
     .background(Color.surface)
@@ -90,25 +114,33 @@ private struct LoggerContent: View {
     .navigationSubtitle(model.date.label(today: appModel.today))
     .navigationBarTitleDisplayMode(.inline)
     .toolbar {
+      if dynamicTypeSize.isAccessibilitySize {
+        ToolbarItemGroup(placement: .keyboard) {
+          Spacer()
+          Button("Hide keyboard", systemImage: "keyboard.chevron.compact.down") { hideKeyboard() }
+            .labelStyle(.iconOnly)
+        }
+      }
       ToolbarItem(placement: .cancellationAction) {
         Button("Close", systemImage: "xmark") { close() }
-          .disabled(model.isSaving)
+          .disabled(model.isSaving || model.isClosing)
       }
       if model.hasInput {
-        ToolbarItem(placement: .secondaryAction) {
+        ToolbarItem(placement: .topBarTrailing) {
           Menu {
             if !model.state.items.isEmpty {
               Button("Edit description", systemImage: "square.and.pencil") {
                 isEditingSource = true
               }
             }
-            Button("Clear draft", systemImage: "trash", role: .destructive) {
-              isClearConfirmPresented = true
+            Button("Discard draft", systemImage: "trash", role: .destructive) {
+              isDiscardConfirmPresented = true
             }
           } label: {
             Label("Meal actions", systemImage: "ellipsis")
           }
-          .disabled(model.isEstimating || model.isSaving)
+          .accessibilityIdentifier("mealActions")
+          .disabled(model.isEstimating || model.isSaving || model.isClosing)
         }
       }
     }
@@ -150,17 +182,8 @@ private struct LoggerContent: View {
         .ignoresSafeArea()
     }
     .aiConsentAlert($consentAction)
-    .confirmationDialog(
-      "Clear this draft?", isPresented: $isClearConfirmPresented, titleVisibility: .visible
-    ) {
-      Button("Clear draft", role: .destructive) { Task { await model.clearDraft() } }
-    } message: {
-      Text("The description, photo, and items are removed.")
-    }
-    .confirmationDialog(
-      "Discard this meal?", isPresented: $isDiscardConfirmPresented, titleVisibility: .visible
-    ) {
-      Button("Discard meal", role: .destructive) { discardAndClose() }
+    .alert("Discard this draft?", isPresented: $isDiscardConfirmPresented) {
+      Button("Discard draft", role: .destructive) { discardAndClose() }
       Button("Keep editing", role: .cancel) {}
     } message: {
       Text("The description, photo, and items are removed.")
@@ -172,9 +195,8 @@ private struct LoggerContent: View {
     .onChange(of: model.estimateCount) { _, _ in
       isEditingSource = false
       hideKeyboard()
-      expandSingleItem()
+      expandedId = nil
     }
-    .onAppear(perform: expandSingleItem)
     .task { await appModel.libraryStore.load() }
     .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification))
     {
@@ -218,7 +240,7 @@ private struct LoggerContent: View {
       Text("What did you eat?")
         .font(.title2.weight(.semibold))
 
-      sourceTiles
+      if !dynamicTypeSize.isAccessibilitySize { sourceTiles }
 
       HStack(alignment: .bottom, spacing: 4) {
         TextField(
@@ -228,7 +250,7 @@ private struct LoggerContent: View {
               ? "Or describe it, e.g. 150 g chicken and rice" : "Add details (optional)"),
           axis: .vertical
         )
-        .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3...10 : 2...6)
+        .lineLimit(dynamicTypeSize.isAccessibilitySize ? 1...10 : 2...6)
         .focused($isTextFocused)
         .accessibilityIdentifier("mealText")
         .padding(.vertical, 16)
@@ -245,6 +267,9 @@ private struct LoggerContent: View {
       .padding(.trailing, 6)
       .background(Color.canvas, in: .rect(cornerRadius: 12))
       .disabled(model.isEstimating)
+      .id("composerInput")
+
+      if dynamicTypeSize.isAccessibilitySize { sourceTiles }
 
       if let data = model.imageData, let image = UIImage(data: data) {
         photoPreview(image)
@@ -280,7 +305,11 @@ private struct LoggerContent: View {
       }
       sourceTile("Scan label", systemImage: "doc.text.viewfinder", id: "attachScan") {
         runAI {
-          if DocumentScanner.isAvailable { isScannerPresented = true } else { pickPhoto(isLabel: true) }
+          if DocumentScanner.isAvailable {
+            isScannerPresented = true
+          } else {
+            pickPhoto(isLabel: true)
+          }
         }
       }
       sourceTile("Saved foods", systemImage: "books.vertical", id: "attachLibrary") {
@@ -294,19 +323,24 @@ private struct LoggerContent: View {
     _ title: LocalizedStringKey, systemImage: String, id: String, action: @escaping () -> Void
   ) -> some View {
     Button(action: action) {
-      VStack(spacing: 8) {
-        Image(systemName: systemImage)
-          .font(.title2)
-          .foregroundStyle(Color.brandPrimary)
-        Text(title)
-          .font(.subheadline.weight(.medium))
-          .foregroundStyle(.primary)
-          .multilineTextAlignment(.center)
+      Group {
+        if dynamicTypeSize.isAccessibilitySize {
+          Label(title, systemImage: systemImage)
+            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+        } else {
+          VStack(spacing: 8) {
+            Image(systemName: systemImage).font(.title2).foregroundStyle(Color.brandPrimary)
+            Text(title).font(.subheadline.weight(.medium)).multilineTextAlignment(.center)
+          }
+          .frame(maxWidth: .infinity, minHeight: 88)
+          .padding(.vertical, 8)
+        }
       }
-      .frame(maxWidth: .infinity, minHeight: 88)
-      .padding(.vertical, 8)
-      .background(Color.canvas, in: .rect(cornerRadius: 16))
-      .contentShape(.rect(cornerRadius: 16))
+      .foregroundStyle(.primary)
+      .background(Color.canvas, in: .rect(cornerRadius: 12))
+      .contentShape(.rect(cornerRadius: 12))
     }
     .buttonStyle(.plain)
     .accessibilityIdentifier(id)
@@ -320,10 +354,6 @@ private struct LoggerContent: View {
   /// A photo starts the estimate at once; text typed before it is included.
   private func attachAndEstimate(_ data: Data, isLabel: Bool) async {
     if await model.attachPhoto(data, isLabel: isLabel) { runAI(model.estimate) }
-  }
-
-  private func expandSingleItem() {
-    if model.state.items.count == 1 { expandedId = model.state.items.first?.id }
   }
 
   private func photoPreview(_ image: UIImage) -> some View {
@@ -385,30 +415,39 @@ private struct LoggerContent: View {
           let stacked = dynamicTypeSize.isAccessibilitySize
           (stacked
             ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
-            : AnyLayout(HStackLayout(alignment: .firstTextBaseline)))
-          {
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
-              Text(model.hasAIItems ? "Estimated total" : "Meal total")
+            : AnyLayout(HStackLayout(alignment: .firstTextBaseline))) {
+              HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Text(
+                  model.hasInvalidEdits
+                    ? "Last valid total"
+                    : stacked ? "Total" : model.hasAIItems ? "Estimated total" : "Meal total"
+                )
                 .foregroundStyle(.secondary)
-              KcalText(value: model.totals.calories).font(.headline)
+                KcalText(value: model.totals.calories).font(.headline)
+              }
+              .accessibilityElement(children: .combine)
+              .accessibilityIdentifier("reviewTotal")
+              if !stacked { Spacer(minLength: 8) }
+              if let day {
+                DayImpact.remaining(
+                  day.goals.calories, day.totals.calories + model.totals.calories, unit: "kcal"
+                )
+                .font(.subheadline.weight(.semibold))
+                .accessibilityLabel("Calories after this meal")
+              }
             }
-            .accessibilityElement(children: .combine)
-            .accessibilityIdentifier("reviewTotal")
-            if !stacked { Spacer(minLength: 8) }
-            if let day {
-              DayImpact.remaining(
-                day.goals.calories, day.totals.calories + model.totals.calories, unit: "kcal"
-              )
-              .font(.subheadline.weight(.semibold))
-              .accessibilityLabel("Calories after this meal")
-            }
-          }
           if let day {
             DayImpact(
               goals: day.goals, eaten: day.totals, meal: model.totals,
               isCompact: isShortSheet || isKeyboardVisible || dynamicTypeSize.isAccessibilitySize)
           }
         }
+      }
+      if model.hasInvalidEdits {
+        Text("Correct the highlighted values before logging.")
+          .font(.footnote)
+          .foregroundStyle(Color.danger)
+          .accessibilityIdentifier("invalidEdits")
       }
       if model.isStale {
         Text("Your photo or description changed. Update the estimate before logging.")
@@ -424,7 +463,7 @@ private struct LoggerContent: View {
         .frame(minHeight: 44)
         .accessibilityIdentifier("restoreEstimate")
       }
-      // The keyboard button sits in this row, not in a keyboard toolbar, so the two never overlap.
+      // Accessibility sizes use the native keyboard toolbar to leave the full row for the action.
       HStack(spacing: 8) {
         Button(action: primary) {
           Group {
@@ -433,7 +472,7 @@ private struct LoggerContent: View {
             } else if model.isEstimating {
               ProgressView()
             } else if model.primaryAction == .estimate || model.state.items.isEmpty {
-              Label("Estimate nutrition", systemImage: "sparkles")
+              Text(dynamicTypeSize.isAccessibilitySize ? "Estimate" : "Estimate nutrition")
             } else if isEntryVisible {
               Text("Review meal")
             } else {
@@ -442,18 +481,19 @@ private struct LoggerContent: View {
           }
           .font(.headline)
           .foregroundStyle(colorScheme == .dark ? Color.black : Color.white)
-          .frame(maxWidth: .infinity, minHeight: 36)
+          .frame(maxWidth: .infinity, minHeight: 44)
         }
         .buttonStyle(.borderedProminent)
         .buttonBorderShape(.capsule)
-        .controlSize(.large)
+        .controlSize(dynamicTypeSize.isAccessibilitySize ? .regular : .large)
         .disabled(isPrimaryDisabled)
         .accessibilityIdentifier("loggerPrimary")
-        if isKeyboardVisible {
+        .accessibilityLabel(primaryAccessibilityLabel)
+        if isKeyboardVisible && !dynamicTypeSize.isAccessibilitySize {
           Button("Hide keyboard", systemImage: "keyboard.chevron.compact.down") { hideKeyboard() }
             .labelStyle(.iconOnly)
             .font(.headline)
-            .frame(minWidth: 36, minHeight: 36)
+            .frame(minWidth: 44, minHeight: 44)
             .buttonStyle(.glass)
             .buttonBorderShape(.circle)
             .controlSize(.large)
@@ -471,11 +511,11 @@ private struct LoggerContent: View {
   }
 
   private var isPrimaryDisabled: Bool {
-    if model.isEstimating || model.isSaving { return true }
+    if model.isEstimating || model.isSaving || model.isClosing { return true }
     if model.primaryAction == .estimate || model.state.items.isEmpty {
       return !model.fingerprint.hasInput
     }
-    return AnalyzeGate.logBlockReason(model.state.items) != nil
+    return model.hasInvalidEdits || AnalyzeGate.logBlockReason(model.state.items) != nil
   }
 
   private func primary() {
@@ -504,9 +544,18 @@ private struct LoggerContent: View {
     }
   }
 
+  private var primaryAccessibilityLabel: String {
+    if model.isSaving { return String(localized: "Saving meal") }
+    if model.isEstimating { return String(localized: "Estimating nutrition") }
+    if model.primaryAction == .estimate || model.state.items.isEmpty {
+      return String(localized: "Estimate nutrition")
+    }
+    return isEntryVisible ? String(localized: "Review meal") : String(localized: "Log meal")
+  }
+
   /// Close starts the next meal fresh: it discards the input, after a confirmation when there is any.
   private func close() {
-    model.cancelEstimate()
+    hideKeyboard()
     if model.hasInput {
       isDiscardConfirmPresented = true
     } else {
@@ -515,10 +564,7 @@ private struct LoggerContent: View {
   }
 
   private func discardAndClose() {
-    Task {
-      await model.clearDraft()
-      dismiss()
-    }
+    Task { if await model.clearDraft() { dismiss() } }
   }
 
   private func hideKeyboard() {
@@ -545,7 +591,7 @@ private struct DayImpact: View {
               .joined(separator: " · ")
           )
           .font(.footnote)
-          .foregroundStyle(Color.danger)
+          .foregroundStyle(.secondary)
           .frame(maxWidth: .infinity, alignment: .trailing)
         }
       } else {
@@ -590,7 +636,7 @@ private struct DayImpact: View {
     Text(remainingText(goal, total, unit: unit))
       .fontDesign(.rounded)
       .monospacedDigit()
-      .foregroundStyle(total > goal ? Color.danger : Color.primary)
+      .foregroundStyle(Color.primary)
   }
 
   private static func remainingText(_ goal: Double, _ total: Double, unit: String) -> String {
@@ -617,7 +663,7 @@ private struct ImpactBar: View {
       HStack(spacing: 0) {
         Rectangle().fill(color).frame(width: geometry.size.width * eaten / scale)
         Rectangle()
-          .fill(eaten + meal > goal ? Color.danger : color.opacity(0.4))
+          .fill(color.opacity(0.4))
           .frame(width: geometry.size.width * meal / scale)
       }
       .frame(maxWidth: .infinity, alignment: .leading)

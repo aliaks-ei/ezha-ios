@@ -29,8 +29,23 @@ struct LoggerState: Codable, Equatable {
   var reviewAnswer: String?
   /// A clarification's prior draft, retained across relaunch until the new estimate succeeds.
   var clarificationBaseline: Data?
+  var nutritionEdits: [UUID: [String: String]]?
 
   var isEmpty: Bool { self == LoggerState(entryId: entryId) }
+}
+
+/// Draft operations are injectable so storage failures can be exercised without losing user data.
+struct LoggerDraftAccess {
+  var load: (DateKey) async throws -> (state: Data, imageData: Data?)?
+  var save: (DateKey, Data, Data?) async throws -> Void
+  var delete: (DateKey) async throws -> Void
+
+  static func live(_ store: DraftStore) -> Self {
+    Self(
+      load: { try await store.load($0) },
+      save: { try await store.save($0, state: $1, imageData: $2) },
+      delete: { try await store.delete($0) })
+  }
 }
 
 /// One logger sheet, bound to a date.
@@ -62,6 +77,9 @@ final class LoggerModel {
   private(set) var stage: Stage?
   var errorMessage: String?
   private(set) var isSaving = false
+  private(set) var isClosing = false
+  private var savedState: LoggerState?
+  private var savedImageData: Data?
   /// The library item being added from "Add from library", while its ingredients load.
   private(set) var quickAddingId: UUID?
   /// Incremented after each estimate, for the item insert animation and haptics.
@@ -72,6 +90,7 @@ final class LoggerModel {
 
   let date: DateKey
   @ObservationIgnored private let appModel: AppModel
+  @ObservationIgnored private let drafts: LoggerDraftAccess
   @ObservationIgnored private var estimateTask: Task<Void, Never>?
   @ObservationIgnored private var uploadTask: Task<String, any Error>?
   @ObservationIgnored private var attachmentId = UUID()
@@ -80,9 +99,10 @@ final class LoggerModel {
   @ObservationIgnored private var firstUnsavedChange: Date?
   @ObservationIgnored private var isRestoring = true
 
-  init(date: DateKey, appModel: AppModel) {
+  init(date: DateKey, appModel: AppModel, drafts: LoggerDraftAccess? = nil) {
     self.date = date
     self.appModel = appModel
+    self.drafts = drafts ?? .live(appModel.sync.draftStore)
   }
 
   // MARK: Derived state
@@ -100,9 +120,29 @@ final class LoggerModel {
   }
 
   var isEstimating: Bool { stage != nil }
-  /// Text, a photo, or items. Closing asks before discarding them.
+  /// Text, a photo, or items kept when the sheet closes.
   var hasInput: Bool { !state.isEmpty || imageData != nil }
-  var totals: MacroTotals { LogItemMath.totals(state.items) }
+  var isDraftSaved: Bool {
+    !isRestoring && savedState == state && savedImageData == imageData
+  }
+  var hasInvalidEdits: Bool {
+    state.items.contains { NumericInput.portionError($0.gramsText) != nil }
+      || (state.nutritionEdits ?? [:]).values.contains {
+        $0.values.contains { NumericInput.nutritionError($0) != nil }
+      }
+  }
+  var totals: MacroTotals { state.items.reduce(.zero) { $0 + macros(for: $1) } }
+
+  /// An invalid visible portion keeps the last valid calculation, clearly labeled by the view.
+  func macros(for item: LogItem) -> MacroTotals {
+    var valid = item
+    if NumericInput.portionError(item.gramsText) != nil {
+      valid.gramsText =
+        state.lastValidByItem[item.id]
+        ?? Macros.format(item.baseGrams > 0 ? item.baseGrams : 100, maxFractionDigits: 1)
+    }
+    return LogItemMath.macros(valid)
+  }
   var hasAIItems: Bool { state.items.contains { $0.origin == .ai } }
   var canRestorePreviousEstimate: Bool {
     guard let previousEstimate else { return false }
@@ -130,7 +170,7 @@ final class LoggerModel {
 
   /// Restores the draft for this date, or applies a "Log this" prefill.
   func restore() async {
-    if let draft = try? await appModel.sync.draftStore.load(date),
+    if let draft = try? await drafts.load(date),
       let saved = try? JSONDecoder.ezha.decode(LoggerState.self, from: draft.state)
     {
       state = saved
@@ -139,11 +179,19 @@ final class LoggerModel {
         try? JSONDecoder.ezha.decode(LoggerState.self, from: $0)
       }
     }
+    for item in state.items where state.lastValidByItem[item.id] == nil {
+      if NumericInput.portionError(item.gramsText) == nil {
+        state.lastValidByItem[item.id] = item.gramsText
+      }
+    }
+    savedState = state
+    savedImageData = imageData
     if let prefill = appModel.loggerPrefill {
       appModel.loggerPrefill = nil
       if state.text.isEmpty { state.text = prefill }
     }
     isRestoring = false
+    if !isDraftSaved { scheduleDraftSave() }
   }
 
   /// Saves 400 ms after the last change, and at most 1.2 s after the first unsaved one.
@@ -164,22 +212,44 @@ final class LoggerModel {
   /// Returns false when the draft could not be saved.
   @discardableResult
   func saveDraftNow() async -> Bool {
+    guard !isRestoring else { return false }
     draftTask?.cancel()
     firstUnsavedChange = nil
+    let snapshot = state
+    let photo = imageData
     do {
-      if state.isEmpty && imageData == nil {
-        try await appModel.sync.draftStore.delete(date)
+      if snapshot.isEmpty && photo == nil {
+        try await drafts.delete(date)
       } else {
-        try await appModel.sync.draftStore.save(
-          date, state: JSONEncoder.ezha.encode(state), imageData: imageData)
+        try await drafts.save(date, JSONEncoder.ezha.encode(snapshot), photo)
       }
+      savedState = snapshot
+      savedImageData = photo
       return true
     } catch {
       return false
     }
   }
 
-  func clearDraft() async {
+  func stopBackgroundWork() {
+    cancelEstimate()
+    uploadTask?.cancel()
+    uploadTask = nil
+    attachmentId = UUID()
+  }
+
+  @discardableResult
+  func clearDraft() async -> Bool {
+    isClosing = true
+    defer { isClosing = false }
+    stopBackgroundWork()
+    draftTask?.cancel()
+    do {
+      try await drafts.delete(date)
+    } catch {
+      errorMessage = String(localized: "Your draft could not be discarded. Try again.")
+      return false
+    }
     cancelEstimate()
     uploadTask?.cancel()
     uploadTask = nil
@@ -192,7 +262,9 @@ final class LoggerModel {
     isRestoring = false
     draftTask?.cancel()
     firstUnsavedChange = nil
-    try? await appModel.sync.draftStore.delete(date)
+    savedState = state
+    savedImageData = nil
+    return true
   }
 
   // MARK: Photo
@@ -251,7 +323,7 @@ final class LoggerModel {
   // MARK: Estimate
 
   func estimate() {
-    guard fingerprint.hasInput, !isEstimating else { return }
+    guard fingerprint.hasInput, !isEstimating, !isClosing else { return }
     errorMessage = nil
     provisionalItems = []
     let currentEstimateId = UUID()
@@ -340,6 +412,8 @@ final class LoggerModel {
       isLabel
       ? LogItemMath.fromLabelEstimate(estimate, grams: labelGrams)
       : LogItemMath.fromEstimate(estimate)
+    let oldAIIds = state.items.filter { $0.origin == .ai }.map(\.id)
+    for id in oldAIIds { state.nutritionEdits?[id] = nil }
     state.items = LogItemMath.replacingAIItems(in: state.items, with: newItems)
     state.review = estimate.review
     state.reviewItemId = estimate.review.flatMap {
@@ -474,13 +548,14 @@ final class LoggerModel {
 
   func removeItem(_ id: UUID) {
     state.items.removeAll { $0.id == id }
+    state.nutritionEdits?[id] = nil
     if state.reviewItemId == id { dismissReview() }
   }
 
   func setGrams(_ id: UUID, _ text: String) {
     guard let index = state.items.firstIndex(where: { $0.id == id }) else { return }
     state.items[index].gramsText = text
-    if LogItemMath.validGrams(text) != nil {
+    if NumericInput.portionError(text) == nil {
       state.lastValidByItem[id] = text
       if let food = state.items[index].linkedFoodId, state.items[index].origin == .libraryFood {
         state.lastValidByFood[food] = text
@@ -518,16 +593,27 @@ final class LoggerModel {
     return result.hitMax
   }
 
-  /// Restores the last valid grams when a field loses focus with invalid text.
+  /// Invalid text stays visible until corrected, including after keyboard dismissal.
   func gramsFocusLost(_ id: UUID) {
-    guard let index = state.items.firstIndex(where: { $0.id == id }) else { return }
-    let item = state.items[index]
-    let restored = LogItemMath.restoredGramsText(
-      for: item, lastValidByItem: state.lastValidByItem, lastValidByFood: state.lastValidByFood)
-    if restored != item.gramsText { state.items[index].gramsText = restored }
-    if (parseNumberInput(restored) ?? 0) > LogItemMath.maxGrams {
-      state.items[index].gramsText = Macros.format(LogItemMath.maxGrams, maxFractionDigits: 1)
-      errorMessage = LogItemMath.maxGramsMessage
+    guard let item = state.items.first(where: { $0.id == id }),
+      NumericInput.portionError(item.gramsText) == nil,
+      let grams = parseNumberInput(item.gramsText)
+    else { return }
+    setGrams(id, Macros.format(grams, maxFractionDigits: 1))
+  }
+
+  func nutritionText(_ item: LogItem, _ field: String, value: Double) -> String {
+    state.nutritionEdits?[item.id]?[field] ?? Macros.format(value, maxFractionDigits: 1)
+  }
+
+  func setNutritionText(
+    _ id: UUID, _ field: String, _ keyPath: WritableKeyPath<MacroTotals, Double>, _ text: String
+  ) {
+    var edits = state.nutritionEdits ?? [:]
+    edits[id, default: [:]][field] = text
+    state.nutritionEdits = edits
+    if NumericInput.nutritionError(text) == nil, let value = parseNumberInput(text) {
+      setPer100g(id, keyPath, value)
     }
   }
 
@@ -547,7 +633,11 @@ final class LoggerModel {
 
   /// Logs the meal. Returns true when the sheet should close.
   func log() async -> Bool {
-    guard !isSaving, !isEstimating else { return false }
+    guard !isSaving, !isEstimating, !isClosing else { return false }
+    guard !hasInvalidEdits else {
+      errorMessage = String(localized: "Correct the highlighted values before logging.")
+      return false
+    }
     guard primaryAction != .estimate else {
       errorMessage = AnalyzeGate.staleMessage
       return false
@@ -588,7 +678,11 @@ final class LoggerModel {
       let libraryIngredients = LogItemMath.mealIngredients(from: state.items)
       let libraryName = mealName.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty ?? "Meal"
       let alreadySavedToLibrary = state.saveToLibrary
-      await clearDraft()
+      if !(await clearDraft()) {
+        notices.append(
+          String(localized: "Meal logged. Its draft could not be cleared; try discarding it again.")
+        )
+      }
       if alreadySavedToLibrary {
         appModel.showToast(notices.joined(separator: " "))
       } else {

@@ -25,7 +25,8 @@ struct MacroFieldsModel: Equatable {
   /// The parsed values, or nil when any field is not a number ≥ 0.
   var values: MacroTotals? {
     let parsed = [calories, protein, carbs, fat].map(parseNumberInput)
-    guard parsed.allSatisfy({ ($0 ?? -1) >= 0 }) else { return nil }
+    guard [calories, protein, carbs, fat].allSatisfy({ NumericInput.nutritionError($0) == nil })
+    else { return nil }
     return MacroTotals(
       calories: parsed[0] ?? 0, protein: parsed[1] ?? 0, carbs: parsed[2] ?? 0, fat: parsed[3] ?? 0)
   }
@@ -44,6 +45,8 @@ struct MacroFieldsModel: Equatable {
 /// Four labeled decimal fields for a `Form` section.
 struct MacroFields: View {
   @Binding var model: MacroFieldsModel
+  var basis: LocalizedStringKey = ""
+  @State private var editedFields: Set<String> = []
 
   var body: some View {
     row("Calories", unit: "kcal", id: "caloriesField", text: $model.calories)
@@ -55,18 +58,26 @@ struct MacroFields: View {
   private func row(
     _ title: LocalizedStringKey, unit: LocalizedStringKey, id: String, text: Binding<String>
   ) -> some View {
-    LabeledContent {
-      HStack(spacing: 4) {
-        TextField(title, text: text, prompt: Text(verbatim: "0"))
-          .keyboardType(.decimalPad)
-          .multilineTextAlignment(.trailing)
-          .fontDesign(.rounded)
-          .monospacedDigit()
-          .accessibilityIdentifier(id)
-        Text(unit).foregroundStyle(.secondary)
+    VStack(alignment: .leading, spacing: 4) {
+      LabeledContent {
+        HStack(spacing: 4) {
+          TextField(title, text: text, prompt: Text(verbatim: "0"))
+            .keyboardType(.decimalPad)
+            .multilineTextAlignment(.trailing)
+            .fontDesign(.rounded)
+            .monospacedDigit()
+            .frame(minWidth: 44, minHeight: 44)
+            .accessibilityLabel(Text(title) + Text(" ") + Text(basis))
+            .accessibilityIdentifier(id)
+            .onChange(of: text.wrappedValue) { _, _ in editedFields.insert(id) }
+          Text(unit).foregroundStyle(.secondary)
+        }
+      } label: {
+        Text(title)
       }
-    } label: {
-      Text(title)
+      if let error = NumericInput.nutritionError(text.wrappedValue), editedFields.contains(id) {
+        Text(error).font(.footnote).foregroundStyle(Color.danger)
+      }
     }
   }
 }

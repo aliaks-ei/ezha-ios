@@ -35,7 +35,11 @@ struct OnboardingView: View {
   private var targetStep: some View {
     Form {
       Section {
-        MacroFields(model: $macros)
+        Text("Starting values — adjust to your own target.")
+          .font(.subheadline)
+          .foregroundStyle(.secondary)
+          .accessibilityIdentifier("startingTargetExplanation")
+        MacroFields(model: $macros, basis: "per day")
       } header: {
         Text("Calories and macros per day")
       } footer: {

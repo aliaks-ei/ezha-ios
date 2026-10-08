@@ -173,8 +173,19 @@ Checks to tap through on the iPhone:
 
 ## Library grouping and search (2026-10-08)
 
-- Chosen option: D in `docs/design/library-grouping/options.html`. Library tab and the logger's Library picker show "Usual" (current time of day), Favorites, and Recent, then every item in A–Z sections with the native section index. Favorites moved from the filter to a section.
+- Chosen option: D. Library tab and the logger's Library picker show "Usual" (current time of day), Favorites, and Recent, then every item in A–Z sections with the native section index. Favorites moved from the filter to a section.
 - Search ranks matches: name prefix, word prefix, substring, then one typo for terms of 5+ letters; ties by use, then recency. A picker search with no match offers "Estimate … with AI", which keeps picked items and adds the text to the description.
 - Backend: migration `20261008120000_saved_food_time_slots.sql` adds `uses_morning`, `uses_midday`, `uses_evening` to `saved_foods` and a `p_time_slot` parameter (default null) to `log_food_entry`. Counts start at 0, so "Usual" appears after 3 logs of an item in one time slot.
 - Verified: unit tests 70/70; `rpc_checks.sql` passed on local Supabase (slot counted once per entry); UI harness `UITests/run.sh` 15/15 with light, dark, and large-text screenshots inspected. Device build succeeded.
 - User authorized the remote migration and device install. `supabase db push --linked` applied the migration (remote in sync). The build was installed and launched on Aliaksei's iPhone 16 Pro with `devicectl`. Tapping through on the device was not automated.
+
+## 2026-10-08 — Approved UI/UX audit implementation
+
+Implemented all eleven approved recommendations: accessible sign-in and keyboard flows; safe draft dismissal and explicit discard; numeric hit targets, persistent validation and contextual labels; adaptive warning contrast; four destination tabs with a separate logging action; focused nutrition review; accessible source ordering and selection review; clearer starting targets and Suggestions preferences.
+
+Verification: app/widget build and 72 unit tests passed, changed Swift files passed strict lint, and whitespace checks passed. All 44 distinct native UI methods have passing evidence across bounded iPhone 17 Pro, iPhone SE and iPad mini runs. Final compact checks passed 8/8, AX5 input visibility 1/1, and actual iPad landscape 1/1. Light, dark and enlarged-text screenshots inspected. Simulator fixtures do not verify live authentication, camera/backend behavior, physical-device interaction, performance or full VoiceOver support. No backend migration or deployment.
+
+Follow-up the same day, at the user's request:
+- "Log meal" is back as the search-role tab at the trailing end of the tab bar (brand plus in the native glass button). The iPad toolbar copy (`LogMealToolbar`) is removed.
+- Close in the logger discards the meal again: with input it asks "Discard this draft?" (Keep editing / Discard draft). Swipe-down is blocked while there is input. Drafts still save in the background for app restarts.
+- Design audit files (`docs/`, `.impeccable/`) removed from the repo.
