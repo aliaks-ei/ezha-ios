@@ -286,6 +286,10 @@ public struct SavedFood: Codable, Sendable, Hashable, Identifiable {
   public var isMeal: Bool
   public var isFavorite: Bool
   public var lastUsedAt: Date?
+  /// Logs per time of day, for the Library "Usual now" section.
+  public var usesMorning: Int
+  public var usesMidday: Int
+  public var usesEvening: Int
   public var createdAt: Date?
   public var updatedAt: Date?
 
@@ -293,7 +297,8 @@ public struct SavedFood: Codable, Sendable, Hashable, Identifiable {
     id: UUID, userId: UUID? = nil, name: String, unitType: FoodUnitType = .per100g,
     servingSize: Double? = nil, servingUnit: String? = nil, per100g: MacroTotals = .zero,
     perServing: MacroTotals = .zero, isMeal: Bool = false, isFavorite: Bool = false,
-    lastUsedAt: Date? = nil, createdAt: Date? = nil, updatedAt: Date? = nil
+    lastUsedAt: Date? = nil, usesMorning: Int = 0, usesMidday: Int = 0, usesEvening: Int = 0,
+    createdAt: Date? = nil, updatedAt: Date? = nil
   ) {
     self.id = id
     self.userId = userId
@@ -312,8 +317,31 @@ public struct SavedFood: Codable, Sendable, Hashable, Identifiable {
     self.isMeal = isMeal
     self.isFavorite = isFavorite
     self.lastUsedAt = lastUsedAt
+    self.usesMorning = usesMorning
+    self.usesMidday = usesMidday
+    self.usesEvening = usesEvening
     self.createdAt = createdAt
     self.updatedAt = updatedAt
+  }
+
+  public var useCount: Int { usesMorning + usesMidday + usesEvening }
+
+  public func uses(in slot: TimeSlot) -> Int {
+    switch slot {
+    case .morning: usesMorning
+    case .midday: usesMidday
+    case .evening: usesEvening
+    }
+  }
+
+  /// Mirrors `log_food_entry`, so the list updates before the next fetch.
+  public mutating func recordUse(at date: Date = .now, calendar: Calendar = .current) {
+    lastUsedAt = date
+    switch TimeSlot(date: date, calendar: calendar) {
+    case .morning: usesMorning += 1
+    case .midday: usesMidday += 1
+    case .evening: usesEvening += 1
+    }
   }
 
   public var per100g: MacroTotals {
@@ -345,6 +373,9 @@ public struct SavedFood: Codable, Sendable, Hashable, Identifiable {
     case isMeal = "is_meal"
     case isFavorite = "is_favorite"
     case lastUsedAt = "last_used_at"
+    case usesMorning = "uses_morning"
+    case usesMidday = "uses_midday"
+    case usesEvening = "uses_evening"
     case createdAt = "created_at"
     case updatedAt = "updated_at"
   }
@@ -368,6 +399,9 @@ public struct SavedFood: Codable, Sendable, Hashable, Identifiable {
     isMeal = try c.decodeIfPresent(Bool.self, forKey: .isMeal) ?? false
     isFavorite = try c.decodeIfPresent(Bool.self, forKey: .isFavorite) ?? false
     lastUsedAt = try c.decodeIfPresent(Date.self, forKey: .lastUsedAt)
+    usesMorning = try c.decodeIfPresent(Int.self, forKey: .usesMorning) ?? 0
+    usesMidday = try c.decodeIfPresent(Int.self, forKey: .usesMidday) ?? 0
+    usesEvening = try c.decodeIfPresent(Int.self, forKey: .usesEvening) ?? 0
     createdAt = try c.decodeIfPresent(Date.self, forKey: .createdAt)
     updatedAt = try c.decodeIfPresent(Date.self, forKey: .updatedAt)
   }

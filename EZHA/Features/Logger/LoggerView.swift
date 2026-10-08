@@ -117,6 +117,9 @@ private struct LoggerContent: View {
       LibraryPickerView { items, foodName, mealIds in
         model.addLibraryItems(items, foodName: foodName, mealIds: mealIds)
         isEditingSource = false
+      } onDescribe: { text in
+        model.appendDescription(text)
+        isEditingSource = true
       }
     }
     .navigationDestination(for: LoggerDestination.self) { destination in

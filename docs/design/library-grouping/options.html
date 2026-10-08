@@ -1,0 +1,571 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Library Grouping Options</title>
+<style>
+:root {
+  --page-bg: #FBF8FB; --page-ink: #261D35; --page-sec: #6B6475; --card: #FFFFFF; --line: #E8E2EA;
+  --brand: #D12786; --accent: #FF8E4D; --secondary: #5A50E7;
+  --ink: #261D35; --danger: #EC3642;
+  --grouped: #F8F1F8; --sep: rgba(60,60,67,.16); --sec: rgba(60,60,67,.62); --field: rgba(118,118,128,.12);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --page-bg: #120C18; --page-ink: #F3EEF6; --page-sec: #A89FB3; --card: #1C1424; --line: #2E2438; }
+}
+:root[data-theme="dark"] { --page-bg: #120C18; --page-ink: #F3EEF6; --page-sec: #A89FB3; --card: #1C1424; --line: #2E2438; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page-bg); color: var(--page-ink);
+  font: 16px/1.5 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif; }
+main { max-width: 1180px; margin: 0 auto; padding: 48px 16px 96px; }
+h1 { font-size: 34px; line-height: 1.15; margin: 0 0 8px; letter-spacing: -.02em; }
+h2 { font-size: 26px; margin: 72px 0 8px; letter-spacing: -.01em; }
+h3 { font-size: 17px; margin: 20px 0 6px; }
+.muted { color: var(--page-sec); }
+.lede { font-size: 18px; max-width: 760px; }
+ol, ul { padding-left: 22px; margin: 6px 0; }
+li { margin: 4px 0; }
+a { color: var(--brand); }
+code { font: 13px ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: 1px 5px; }
+.panel { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 20px 24px; }
+.option { display: flex; flex-wrap: wrap; gap: 40px; align-items: flex-start; margin-top: 20px; }
+.notes { flex: 1 1 380px; max-width: 560px; }
+.tag { display: inline-block; font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--brand); margin-bottom: 4px; }
+.pick { background: var(--brand); color: #fff; border-radius: 99px; padding: 2px 10px; margin-left: 8px; font-size: 12px; vertical-align: middle; text-transform: none; letter-spacing: 0; }
+table.cmp { width: 100%; border-collapse: collapse; font-size: 15px; }
+table.cmp th, table.cmp td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+table.cmp th { font-size: 13px; color: var(--page-sec); font-weight: 600; }
+.table-wrap { overflow-x: auto; }
+.hint { font-size: 13px; color: var(--page-sec); margin-top: 10px; text-align: center; max-width: 390px; }
+.ctl { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 0 0 12px; font-size: 14px; color: var(--page-sec); }
+.pill { border: 1px solid var(--line); background: var(--card); color: var(--page-ink); border-radius: 99px; padding: 6px 12px; font: 500 14px -apple-system, sans-serif; cursor: pointer; }
+.pill.on { background: var(--brand); border-color: var(--brand); color: #fff; }
+.sim { position: sticky; top: 0; z-index: 10; background: var(--page-bg); padding: 10px 0; border-bottom: 1px solid var(--line); margin-top: 24px; }
+
+/* ---------- Phone ---------- */
+.phone-col { flex: 0 0 auto; max-width: 100%; }
+.phone { width: 390px; max-width: 100%; height: 844px; border-radius: 58px; background: #0B0B0F; padding: 11px;
+  box-shadow: 0 30px 60px -20px rgba(38,29,53,.35), 0 0 0 1px rgba(0,0,0,.4); color: var(--ink); }
+.screen { width: 100%; height: 100%; border-radius: 47px; overflow: hidden; position: relative;
+  background: var(--grouped); display: flex; flex-direction: column; font-size: 17px; line-height: 1.3; }
+.status { height: 50px; flex: none; display: flex; align-items: center; justify-content: space-between; padding: 6px 30px 0 40px; font-weight: 600; font-size: 16px; }
+.island { width: 124px; height: 36px; background: #000; border-radius: 20px; }
+.status .bat { width: 26px; height: 12px; border: 1.5px solid var(--ink); border-radius: 4px; position: relative; }
+.status .bat::after { content: ""; position: absolute; inset: 1.5px; background: var(--ink); border-radius: 1.5px; }
+.navbar { flex: none; padding: 0 16px; }
+.navbar .top { display: flex; justify-content: space-between; align-items: center; height: 44px; }
+.navbar h4 { font-size: 34px; font-weight: 700; margin: 0 0 8px; letter-spacing: -.01em; }
+.navbar .small { font-size: 17px; font-weight: 600; text-align: center; flex: 1; }
+.glass { width: 44px; height: 44px; border-radius: 50%; background: rgba(255,255,255,.9); box-shadow: 0 2px 10px rgba(0,0,0,.08);
+  display: grid; place-items: center; border: 0; color: var(--ink); cursor: pointer; }
+.glass.x { color: var(--brand); }
+.searchbox { display: flex; align-items: center; gap: 6px; background: var(--field); border-radius: 12px; padding: 0 10px; height: 38px; margin-bottom: 10px; color: var(--sec); }
+.searchbox input { flex: 1; border: 0; background: transparent; font: 17px -apple-system, sans-serif; color: var(--ink); outline: none; min-width: 0; }
+.searchbox .clr { border: 0; background: rgba(118,118,128,.4); color: #fff; width: 18px; height: 18px; border-radius: 50%; font-size: 12px; line-height: 18px; padding: 0; cursor: pointer; }
+.seg { display: flex; background: var(--field); border-radius: 10px; padding: 2px; margin-bottom: 6px; }
+.seg button { flex: 1; border: 0; background: transparent; border-radius: 8px; padding: 6px 4px; font: 500 13px -apple-system, sans-serif; color: var(--ink); cursor: pointer; }
+.seg button.on { background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,.12); font-weight: 600; }
+.chips { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 8px; scrollbar-width: none; }
+.chips::-webkit-scrollbar { display: none; }
+.chip { flex: none; border: 0; background: var(--field); color: var(--ink); border-radius: 99px; padding: 6px 12px; font: 500 14px -apple-system, sans-serif; cursor: pointer; white-space: nowrap; }
+.chip.on { background: var(--ink); color: #fff; }
+.chip small { color: var(--sec); margin-left: 4px; }
+.chip.on small { color: rgba(255,255,255,.7); }
+.body { flex: 1; position: relative; min-height: 0; }
+.content { position: absolute; inset: 0; overflow-y: auto; padding: 0 16px 24px; scrollbar-width: none; scroll-behavior: smooth; }
+.content::-webkit-scrollbar { display: none; }
+.content.with-index { padding-right: 28px; }
+.sec-h { position: sticky; top: 0; z-index: 1; background: var(--grouped); font-size: 13px; font-weight: 600; color: var(--sec); text-transform: uppercase; letter-spacing: .02em; padding: 14px 16px 6px; margin: 0 -16px; display: flex; justify-content: space-between; align-items: baseline; }
+.content.with-index .sec-h { margin-right: -28px; padding-right: 28px; }
+.sec-h .why { text-transform: none; letter-spacing: 0; font-weight: 400; }
+.sec-h.letter { font-size: 15px; color: var(--ink); }
+.group { background: #fff; border-radius: 22px; overflow: hidden; }
+.row { display: flex; align-items: center; gap: 12px; padding: 10px 14px 10px 16px; min-height: 60px; border-bottom: .5px solid var(--sep); cursor: pointer; }
+.row:last-child { border-bottom: 0; }
+.row .main { flex: 1; min-width: 0; }
+.row .nm { font-size: 17px; font-weight: 500; display: flex; align-items: center; gap: 6px; }
+.row .nm span.t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row .sub { font-size: 15px; color: var(--sec); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row .sub .cat { color: var(--secondary); }
+.star { color: var(--accent); font-size: 12px; flex: none; }
+mark { background: color-mix(in srgb, var(--brand) 18%, transparent); color: inherit; border-radius: 3px; padding: 0 1px; }
+.logbtn { flex: none; border: 0; background: var(--field); color: var(--brand); border-radius: 99px; padding: 7px 14px; font: 600 15px -apple-system, sans-serif; cursor: pointer; }
+.check { flex: none; width: 24px; height: 24px; border-radius: 50%; border: 1.6px solid rgba(60,60,67,.35); display: grid; place-items: center; }
+.row.sel .check { background: var(--brand); border-color: var(--brand); }
+.row.sel .check::after { content: ""; width: 10px; height: 5px; border: 2px solid #fff; border-top: 0; border-right: 0; transform: rotate(-45deg) translate(1px,-1px); }
+.index { position: absolute; right: 2px; top: 8px; bottom: 8px; width: 22px; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 0; z-index: 2; }
+.index button { border: 0; background: none; color: var(--brand); font: 600 11px -apple-system, sans-serif; padding: 1px 0; width: 22px; cursor: pointer; line-height: 1.15; }
+.index button.off { color: rgba(60,60,67,.25); cursor: default; }
+.footer { flex: none; background: rgba(255,255,255,.94); backdrop-filter: blur(20px); border-top: .5px solid var(--sep); padding: 12px 16px 28px; }
+.btn { width: 100%; height: 52px; border-radius: 26px; border: 0; background: var(--brand); color: #fff; font: 600 17px -apple-system, sans-serif; font-variant-numeric: tabular-nums; cursor: pointer; }
+.tabbar { flex: none; display: flex; justify-content: space-around; padding: 8px 20px 26px; background: rgba(255,255,255,.94); border-top: .5px solid var(--sep); font-size: 11px; color: var(--sec); }
+.tabbar span { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.tabbar span.on { color: var(--brand); font-weight: 600; }
+.tabbar i { width: 24px; height: 22px; border-radius: 6px; background: currentColor; opacity: .25; }
+.tabbar span.on i { opacity: 1; }
+.empty { text-align: center; color: var(--sec); padding: 36px 12px 12px; font-size: 15px; }
+.ai-row { display: flex; align-items: center; gap: 10px; padding: 14px 16px; color: var(--brand); font-weight: 600; cursor: pointer; }
+.more { width: 100%; border: 0; background: none; color: var(--brand); font: 500 15px -apple-system, sans-serif; padding: 12px 16px; text-align: left; cursor: pointer; }
+.toast { position: absolute; left: 50%; bottom: 110px; transform: translateX(-50%); background: rgba(38,29,53,.92); color: #fff; padding: 8px 14px; border-radius: 99px; font-size: 14px; opacity: 0; transition: opacity .2s; pointer-events: none; white-space: nowrap; z-index: 5; }
+.toast.on { opacity: 1; }
+svg.i { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.dim { color: var(--sec); }
+@media (max-width: 440px) {
+  .phone { border-radius: 0; padding: 0; box-shadow: none; height: 760px; }
+  .screen { border-radius: 24px; }
+  h1 { font-size: 28px; }
+}
+</style>
+</head>
+<body>
+<main>
+  <h1>Library grouping and search</h1>
+  <p class="lede muted">Four options for the Library tab and for the Library picker on the Log meal screen. Each phone works: type in search, switch the filter, tap rows, tap the letter index. Use the toggle above each phone to switch between the Library tab and the Log meal picker.</p>
+
+  <div class="panel" style="margin-top:28px">
+    <h3 style="margin-top:0">Recommendation</h3>
+    <p style="margin:0 0 8px"><b>Option D (hybrid).</b> Show “Usual now”, Favorites and Recent on top, then all items A–Z with a letter index. Rank search results by match quality, then by use. Build it in two steps:</p>
+    <ol>
+      <li>Step 1, no backend change: Favorites + Recent on top, A–Z sections with <code>sectionIndexLabel</code>, ranked search with typo tolerance, “Estimate with AI” when nothing matches.</li>
+      <li>Step 2, small backend change: count uses per time of day, then add the “Usual now” section.</li>
+    </ol>
+    <p style="margin:8px 0 0" class="muted">Skip AI categories (Option C) for now. People look for a saved item by name or by habit, not by food type. AI labels add cost, need a backfill, and a wrong label hides the item.</p>
+  </div>
+
+  <h2>What the research says</h2>
+  <ul>
+    <li><b>Habit beats browsing.</b> MyFitnessPal shows the right foods for the current meal at the top, so no search is needed. Cronometer users complain that recent foods show up “hit or miss”. <a href="https://forums.cronometer.com/discussion/comment/21619">Cronometer forum</a>, <a href="https://macrofactor.com/macrofactor-vs-cronometer/">MacroFactor vs Cronometer</a>.</li>
+    <li><b>Time of day and consistency rank suggestions.</b> Carbon suggests a food at the meal where you usually log it, and lists the most consistent habits first. It waits for 7 active logging days. <a href="https://help.joincarbon.com/en/articles/16242219-smart-suggestions-log-foods-you-eat-often-without-searching">Carbon help</a>.</li>
+    <li><b>Speed is counted in actions.</b> MacroFactor measures loggers by the number of taps per log. Fewer taps per item matters more than smart ranking. <a href="https://macrofactor.com/fastest-food-logger/">MacroFactor FLSI</a>.</li>
+    <li><b>Alphabetical order is for known names.</b> Nielsen: alphabetical sorting rarely helps, except when users know the exact name. A–Z is a good fallback for the long tail, not a good first screen. <a href="https://www.cardinalpath.com/jakob-nielsen-agrees-alphabetical-sorting-rarely-works/">Cardinal Path on Nielsen</a>.</li>
+    <li><b>Frecency</b> (frequency + recency) is the standard ranking for “items I use”. <a href="https://developers.raycast.com/utilities/react-hooks/usefrecencysorting">Raycast useFrecencySorting</a>.</li>
+    <li><b>Native letter index exists on iOS 26.</b> <code>Section { … }.sectionIndexLabel("A")</code> and <code>.listSectionIndexVisibility(.visible)</code> on the List. The app targets iOS 26.0, so no custom scrubber is needed. <a href="https://developer.apple.com/documentation/swiftui/view/sectionindexlabel(_:)">Apple docs</a>, <a href="https://www.hackingwithswift.com/quick-start/swiftui/how-to-add-list-section-index-labels">Hacking with Swift</a>.</li>
+  </ul>
+
+  <h2>Compare</h2>
+  <div class="table-wrap panel" style="padding:8px 12px">
+  <table class="cmp">
+    <tr><th></th><th>A. Alphabet</th><th>B. Usage</th><th>C. AI categories</th><th>D. Hybrid (pick)</th></tr>
+    <tr><td>Best for</td><td>Known name, long list</td><td>Daily repeats</td><td>Browsing by food type</td><td>Both repeats and known names</td></tr>
+    <tr><td>Taps to a usual item</td><td>Scroll or index + tap</td><td>1 tap</td><td>Chip + scroll + tap</td><td>1 tap</td></tr>
+    <tr><td>Data needed</td><td>None</td><td>Use counts per time of day</td><td>Category per item, AI call</td><td>Step 1: none. Step 2: use counts</td></tr>
+    <tr><td>Backend work</td><td>None</td><td>Migration + RPC change</td><td>Migration, AI prompt, backfill</td><td>Step 2 only: migration + RPC change</td></tr>
+    <tr><td>Risk</td><td>Slow for daily use</td><td>Weak for new users</td><td>Wrong labels hide items, cost</td><td>More sections on screen</td></tr>
+  </table>
+  </div>
+
+  <div class="sim">
+    <div class="ctl">Simulate the time of day:
+      <button class="pill" data-slot="m">Morning 8:00</button>
+      <button class="pill" data-slot="d">Midday 13:00</button>
+      <button class="pill" data-slot="e">Evening 19:30</button>
+    </div>
+  </div>
+
+  <h2 id="opt-a">A. Alphabet sections with a letter index</h2>
+  <div class="option">
+    <div class="phone-col" data-phone="A"></div>
+    <div class="notes">
+      <span class="tag">Contacts pattern</span>
+      <h3>How it works</h3>
+      <ol>
+        <li>Favorites stay pinned on top.</li>
+        <li>All other items sit in letter sections A–Z.</li>
+        <li>The letter index on the right edge jumps to a section.</li>
+        <li>Search shows one flat list, ranked by match quality.</li>
+      </ol>
+      <h3>Good</h3>
+      <ul><li>No backend change. Native API: <code>sectionIndexLabel</code>.</li><li>Predictable. The item is always in the same place.</li></ul>
+      <h3>Weak</h3>
+      <ul><li>Daily items are not on the first screen. Oatmeal sits under O every morning.</li><li>Useful only after about 30 items. Short libraries get many one-item sections.</li></ul>
+    </div>
+  </div>
+
+  <h2 id="opt-b">B. Usage sections</h2>
+  <div class="option">
+    <div class="phone-col" data-phone="B"></div>
+    <div class="notes">
+      <span class="tag">MyFitnessPal and Carbon pattern</span>
+      <h3>How it works</h3>
+      <ol>
+        <li>“Usual now”: up to 5 items you often log at this time of day. Change the time above to see it change.</li>
+        <li>“Favorites”, then “Recent” (last 7 days, not already shown).</li>
+        <li>“Everything else”: most used first.</li>
+        <li>Each item shows once, in the first section that fits.</li>
+      </ol>
+      <h3>Good</h3>
+      <ul><li>The usual item is one tap away, with no search.</li><li>Works best in the Log meal picker, where speed matters most.</li></ul>
+      <h3>Weak</h3>
+      <ul><li>New users have no history. “Usual now” stays hidden until about 7 logging days.</li><li>The tail is hard to scan: no order a person can predict.</li></ul>
+      <h3>Data needed</h3>
+      <ul><li><code>log_food_entry</code> already sets <code>last_used_at</code> for <code>p_used_food_ids</code>. Add <code>use_count</code> and three slot counters (morning, midday, evening) to <code>saved_foods</code>, and increase them in the same <code>update</code>.</li><li>The client must send the local hour, because the server does not know the user’s time zone.</li></ul>
+    </div>
+  </div>
+
+  <h2 id="opt-c">C. AI categories</h2>
+  <div class="option">
+    <div class="phone-col" data-phone="C"></div>
+    <div class="notes">
+      <span class="tag">AI groups</span>
+      <h3>How it works</h3>
+      <ol>
+        <li>AI gives each item one category when you save it: Breakfast, Protein, Dairy and eggs, Grains, Fruit and veg, Snacks, Drinks, Sauces.</li>
+        <li>Saved meals stay in their own “Meals” group.</li>
+        <li>Chips at the top filter to one category. The count shows group size.</li>
+        <li>Inside a group, most used first.</li>
+      </ol>
+      <h3>Good</h3>
+      <ul><li>Helps browse: “what snacks do I have?”.</li><li>Groups stay stable, unlike usage sections.</li></ul>
+      <h3>Weak</h3>
+      <ul><li>One AI call per save, plus a backfill for existing items.</li><li>A wrong or unexpected label hides the item (is “Protein bar” a Snack or Protein?). Needs a manual override in the editor.</li><li>Does not make daily repeats faster.</li></ul>
+    </div>
+  </div>
+
+  <h2 id="opt-d">D. Hybrid <span class="pick">Recommended</span></h2>
+  <div class="option">
+    <div class="phone-col" data-phone="D"></div>
+    <div class="notes">
+      <span class="tag">Habit first, A–Z after</span>
+      <h3>How it works</h3>
+      <ol>
+        <li>Top: “Usual now” (step 2), Favorites, Recent. Each item shows once.</li>
+        <li>Below: “All items” in A–Z sections. The A–Z list contains every item, so the letter index always works.</li>
+        <li>The letter index starts with ★ to jump back to the top.</li>
+        <li>The Foods / Meals filter still applies to all sections. Favorites moves out of the filter and into a section.</li>
+        <li>Search ranks: name starts with the term, then a word starts with it, then it contains it, then a one-letter typo. Ties go to the most used.</li>
+        <li>No match in the picker: one row “Estimate ‘…’ with AI” sends the text to the logger.</li>
+      </ol>
+      <h3>Why this one</h3>
+      <ul><li>Daily items are one tap away. Rare items are found by name or letter.</li><li>Step 1 ships with no backend change and fixes most of the pain.</li><li>Same layout in the Library tab and in the picker, so users learn it once.</li></ul>
+      <h3>Build order</h3>
+      <ol>
+        <li><code>LibraryFilter</code>: add <code>sections(...)</code> that returns pinned + A–Z sections, and <code>rank(...)</code> for search. Add tests next to <code>LibraryFilterTests</code>.</li>
+        <li><code>LibraryView</code> and <code>LibraryPickerView</code>: render sections, add <code>sectionIndexLabel</code>, flat ranked list while searching.</li>
+        <li>Picker: “Estimate with AI” row when search has no match.</li>
+        <li>Step 2: migration for use counters, update <code>log_food_entry</code>, add “Usual now”.</li>
+      </ol>
+    </div>
+  </div>
+
+  <h2>Search rules for all options</h2>
+  <ol>
+    <li>While the user types, drop the sections and show one ranked list. Groups slow down scanning when the user already knows the name.</li>
+    <li>Rank by match quality first, then by use. Today the app keeps the default order and only filters.</li>
+    <li>Allow one wrong letter in terms of 5+ letters (“chiken” finds “Chicken”).</li>
+    <li>Highlight the matched text.</li>
+    <li>Keep the current filter (Foods / Meals) while searching.</li>
+  </ol>
+  <p class="muted">Try “chi”, “yog”, “chiken” or “bowl” in any phone above.</p>
+</main>
+
+<script>
+// Sample library. last = days since last log (null = never). uses = logs in last 60 days.
+// slot = time of day when usually logged. cat = AI category (Option C).
+const ITEMS = [
+  ['Oatmeal with banana', 0, 1, 0, 34, 'm', 'Meals', 'Saved meal'],
+  ['Greek yogurt 2%', 0, 0, 1, 28, 'm', 'Dairy & eggs', 'Per 100g · 73 kcal'],
+  ['Flat white', 0, 0, 0, 41, 'm', 'Drinks', '1 cup · 110 kcal'],
+  ['Scrambled eggs', 2, 0, 0, 12, 'm', 'Dairy & eggs', 'Per 100g · 149 kcal'],
+  ['Sourdough toast', 1, 0, 0, 15, 'm', 'Grains', '1 slice · 120 kcal'],
+  ['Peanut butter', 3, 0, 0, 10, 'm', 'Sauces & spreads', '1 tbsp · 94 kcal'],
+  ['Banana', 1, 0, 0, 22, 'm', 'Fruit & veg', '1 piece · 105 kcal'],
+  ['Protein shake', 0, 0, 1, 25, 'e', 'Drinks', '1 scoop · 120 kcal'],
+  ['Chicken breast', 0, 0, 1, 30, 'd', 'Protein', 'Per 100g · 165 kcal'],
+  ['Chicken rice bowl', 1, 1, 0, 18, 'd', 'Meals', 'Saved meal'],
+  ['Cooked white rice', 1, 0, 0, 20, 'd', 'Grains', 'Per 100g · 130 kcal'],
+  ['Caesar salad', 4, 1, 0, 6, 'd', 'Meals', 'Saved meal'],
+  ['Tuna sandwich', 6, 1, 0, 5, 'd', 'Meals', 'Saved meal'],
+  ['Lentil soup', 9, 1, 0, 4, 'd', 'Meals', 'Saved meal'],
+  ['Hummus', 5, 0, 0, 7, 'd', 'Sauces & spreads', 'Per 100g · 166 kcal'],
+  ['Apple', 2, 0, 0, 14, 'd', 'Fruit & veg', '1 piece · 95 kcal'],
+  ['Salmon fillet', 3, 0, 0, 8, 'e', 'Protein', 'Per 100g · 208 kcal'],
+  ['Pasta bolognese', 5, 1, 1, 9, 'e', 'Meals', 'Saved meal'],
+  ['Whole wheat pasta', 5, 0, 0, 9, 'e', 'Grains', 'Per 100g · 348 kcal'],
+  ['Broccoli', 3, 0, 0, 11, 'e', 'Fruit & veg', 'Per 100g · 34 kcal'],
+  ['Sweet potato', 8, 0, 0, 6, 'e', 'Fruit & veg', 'Per 100g · 86 kcal'],
+  ['Beef stir fry', 12, 1, 0, 3, 'e', 'Meals', 'Saved meal'],
+  ['Turkey mince 5%', 10, 0, 0, 4, 'e', 'Protein', 'Per 100g · 140 kcal'],
+  ['Dark chocolate 85%', 1, 0, 1, 16, 'e', 'Snacks', '1 square · 60 kcal'],
+  ['Red wine', 6, 0, 0, 5, 'e', 'Drinks', '1 glass · 125 kcal'],
+  ['Almonds', 4, 0, 0, 9, 'd', 'Snacks', 'Per 100g · 579 kcal'],
+  ['Protein bar', 2, 0, 0, 13, 'd', 'Snacks', '1 bar · 200 kcal'],
+  ['Rice cakes', 14, 0, 0, 3, 'd', 'Snacks', '1 piece · 35 kcal'],
+  ['Cottage cheese', 7, 0, 0, 6, 'e', 'Dairy & eggs', 'Per 100g · 98 kcal'],
+  ['Mozzarella', 20, 0, 0, 2, 'e', 'Dairy & eggs', 'Per 100g · 280 kcal'],
+  ['Avocado', 9, 0, 0, 5, 'm', 'Fruit & veg', '1 piece · 240 kcal'],
+  ['Blueberries', 11, 0, 0, 4, 'm', 'Fruit & veg', 'Per 100g · 57 kcal'],
+  ['Granola', 16, 0, 0, 3, 'm', 'Grains', 'Per 100g · 471 kcal'],
+  ['Kefir', 18, 0, 0, 2, 'm', 'Dairy & eggs', '1 cup · 104 kcal'],
+  ['Orange juice', 25, 0, 0, 2, 'm', 'Drinks', '1 glass · 112 kcal'],
+  ['Quinoa', 30, 0, 0, 1, 'd', 'Grains', 'Per 100g · 120 kcal'],
+  ['Falafel wrap', 22, 1, 0, 2, 'd', 'Meals', 'Saved meal'],
+  ['Pizza margherita', 13, 1, 0, 3, 'e', 'Meals', 'Saved meal'],
+  ['Olive oil', 4, 0, 0, 10, 'e', 'Sauces & spreads', '1 tbsp · 119 kcal'],
+  ['Ketchup', 40, 0, 0, 1, 'e', 'Sauces & spreads', '1 tbsp · 20 kcal'],
+  ['Ice cream', 19, 0, 0, 2, 'e', 'Snacks', 'Per 100g · 207 kcal'],
+  ['Cola zero', 3, 0, 0, 8, 'd', 'Drinks', '1 can · 1 kcal'],
+  ['Ham', 26, 0, 0, 1, 'd', 'Protein', 'Per 100g · 145 kcal'],
+  ['Tofu', null, 0, 0, 0, null, 'Protein', 'Per 100g · 76 kcal'],
+  ['Zucchini', null, 0, 0, 0, null, 'Fruit & veg', 'Per 100g · 17 kcal'],
+  ['Veggie omelette', 15, 1, 0, 3, 'm', 'Meals', 'Saved meal'],
+  ['Yogurt parfait', 8, 1, 0, 4, 'm', 'Meals', 'Saved meal'],
+  ['Wholegrain bread', 2, 0, 0, 12, 'm', 'Grains', '1 slice · 110 kcal'],
+].map(([name, last, meal, fav, uses, slot, cat, sub], id) => ({
+  id, name, last, meal: !!meal, fav: !!fav, uses, slot, cat: meal ? 'Meals' : cat, sub,
+  kcal: meal ? 380 + (id * 37) % 260 : +(sub.match(/(\d+) kcal/) || [0, 0])[1],
+}));
+const CATS = ['Meals', 'Breakfast', 'Protein', 'Dairy & eggs', 'Grains', 'Fruit & veg', 'Snacks', 'Drinks', 'Sauces & spreads'];
+// Option C: AI files morning-only foods under Breakfast.
+for (const it of ITEMS) if (!it.meal && ['Granola', 'Oatmeal', 'Kefir', 'Blueberries'].some(w => it.name.startsWith(w))) it.cat = 'Breakfast';
+
+let SLOT = 'm';
+const SLOT_NAME = { m: 'morning', d: 'midday', e: 'evening' };
+const esc = s => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const byName = (a, b) => a.name.localeCompare(b.name);
+const frecency = it => it.uses / 10 + (it.last == null ? 0 : 3 / (1 + it.last));
+const byUse = (a, b) => frecency(b) - frecency(a);
+
+// ---------- Search ranking ----------
+function lev(a, b) {
+  const d = Array.from({ length: a.length + 1 }, (_, i) => [i]);
+  for (let j = 1; j <= b.length; j++) d[0][j] = j;
+  for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++)
+    d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+  return d[a.length][b.length];
+}
+function termScore(t, name) {
+  const words = name.split(/[\s%-]+/).filter(Boolean);
+  if (name.startsWith(t)) return 4;
+  if (words.some(w => w.startsWith(t))) return 3;
+  if (name.includes(t)) return 2;
+  // One typo against a word prefix of similar length.
+  if (t.length >= 5 && words.some(w => [-1, 0, 1].some(k => lev(t, w.slice(0, t.length + k)) <= 1))) return 1;
+  return 0;
+}
+function rank(items, q) {
+  const terms = q.toLowerCase().split(/\s+/).filter(Boolean);
+  return items.map(it => {
+    const n = it.name.toLowerCase();
+    let s = 0;
+    for (const t of terms) { const v = termScore(t, n); if (!v) return null; s += v; }
+    return { it, s };
+  }).filter(Boolean).sort((a, b) => b.s - a.s || byUse(a.it, b.it)).map(x => x.it);
+}
+function highlight(name, q) {
+  const terms = q.toLowerCase().split(/\s+/).filter(Boolean);
+  if (!terms.length) return esc(name);
+  const marks = new Array(name.length).fill(false);
+  const lower = name.toLowerCase();
+  for (const t of terms) { const i = lower.indexOf(t); if (i >= 0) for (let k = i; k < i + t.length; k++) marks[k] = true; }
+  let out = '', open = false;
+  for (let i = 0; i < name.length; i++) {
+    if (marks[i] && !open) { out += '<mark>'; open = true; }
+    if (!marks[i] && open) { out += '</mark>'; open = false; }
+    out += esc(name[i]);
+  }
+  return out + (open ? '</mark>' : '');
+}
+
+// ---------- Section builders ----------
+const usualNow = pool => pool.filter(it => it.slot === SLOT && it.uses >= 8).sort((a, b) => b.uses - a.uses).slice(0, 5);
+const recent = pool => pool.filter(it => it.last != null && it.last <= 7).sort((a, b) => a.last - b.last);
+function letters(pool) {
+  const map = new Map();
+  for (const it of [...pool].sort(byName)) {
+    const L = /[a-z]/i.test(it.name[0]) ? it.name[0].toUpperCase() : '#';
+    if (!map.has(L)) map.set(L, []);
+    map.get(L).push(it);
+  }
+  return [...map].map(([L, items]) => ({ title: L, letter: true, items, key: 'L' + L }));
+}
+function takeOnce(sections) {
+  const seen = new Set();
+  return sections.map(s => ({ ...s, items: s.items.filter(it => !seen.has(it.id)).slice(0, s.limit).map(it => (seen.add(it.id), it)) })).filter(s => s.items.length);
+}
+const SECTIONS = {
+  A: (pool, st) => {
+    const favs = st.filter === 'fav' ? [] : pool.filter(it => it.fav).sort(byName);
+    return [...(favs.length ? [{ title: 'Favorites', items: favs, key: 'top' }] : []), ...letters(pool.filter(it => !favs.includes(it)))];
+  },
+  B: pool => takeOnce([
+    { title: 'Usual now', why: SLOT_NAME[SLOT], items: usualNow(pool), key: 'top' },
+    { title: 'Favorites', items: pool.filter(it => it.fav).sort(byUse) },
+    { title: 'Recent', why: 'last 7 days', items: recent(pool), limit: 8 },
+    { title: 'Everything else', why: 'most used first', items: [...pool].sort(byUse) },
+  ]),
+  C: (pool, st) => CATS.filter(c => st.cat === 'All' || c === st.cat)
+    .map(c => ({ title: c, items: pool.filter(it => it.cat === c).sort(byUse), key: c === CATS[0] ? 'top' : null })).filter(s => s.items.length),
+  D: (pool, st) => {
+    const top = takeOnce([
+      { title: 'Usual now', why: SLOT_NAME[SLOT], items: usualNow(pool), key: 'top' },
+      { title: 'Favorites', items: pool.filter(it => it.fav).sort(byUse) },
+      { title: 'Recent', why: 'last 7 days', items: recent(pool), limit: 6 },
+    ]);
+    if (top[0]) top[0].key = 'top';
+    const all = letters(pool);
+    if (all[0]) all[0] = { ...all[0], head: 'All items' };
+    return [...top, ...all];
+  },
+};
+const FILTERS = {
+  A: [['all', 'All'], ['food', 'Foods'], ['meal', 'Meals'], ['fav', 'Favorites']],
+  B: [['all', 'All'], ['food', 'Foods'], ['meal', 'Meals']],
+  C: null,
+  D: [['all', 'All'], ['food', 'Foods'], ['meal', 'Meals']],
+};
+const INDEX = { A: true, B: false, C: false, D: true };
+
+// ---------- Phone ----------
+const ic = {
+  x: '<svg class="i" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+  plus: '<svg class="i" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>',
+  search: '<svg class="i" viewBox="0 0 24 24" style="width:17px;height:17px"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4 4"/></svg>',
+  spark: '<svg class="i" viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/></svg>',
+};
+const phones = [];
+
+function mountPhone(col) {
+  const opt = col.dataset.phone;
+  const st = { opt, mode: 'lib', q: '', filter: 'all', cat: 'All', sel: new Set() };
+  col.innerHTML = `
+    <div class="ctl"><button class="pill on" data-mode="lib">Library tab</button><button class="pill" data-mode="pick">Log meal → Library</button></div>
+    <div class="phone"><div class="screen"></div></div>
+    <p class="hint">${INDEX[opt] ? 'Tap a letter on the right edge to jump. ' : ''}Type in search to see ranked results.</p>`;
+  const screen = col.querySelector('.screen');
+  col.querySelectorAll('[data-mode]').forEach(b => b.onclick = () => {
+    st.mode = b.dataset.mode; st.q = ''; st.sel.clear();
+    col.querySelectorAll('[data-mode]').forEach(x => x.classList.toggle('on', x === b));
+    build();
+  });
+
+  function pool() {
+    return ITEMS.filter(it => st.filter === 'all' || (st.filter === 'food' && !it.meal) || (st.filter === 'meal' && it.meal) || (st.filter === 'fav' && it.fav));
+  }
+  // Static chrome is built once so the search field keeps focus while typing.
+  function build() {
+    const pick = st.mode === 'pick';
+    const f = FILTERS[opt];
+    const catCount = c => ITEMS.filter(it => c === 'All' || it.cat === c).length;
+    screen.innerHTML = `
+      <div class="status"><span>9:41</span><span class="island"></span><span class="bat"></span></div>
+      <div class="navbar">
+        ${pick
+          ? `<div class="top"><button class="glass x" aria-label="Close">${ic.x}</button><div class="small">Library</div><span style="width:44px"></span></div>`
+          : `<div class="top"><span></span><button class="glass" aria-label="Add food">${ic.plus}</button></div><h4>Library</h4>`}
+        <label class="searchbox">${ic.search}<input placeholder="Search foods and meals" aria-label="Search foods and meals"><button class="clr" hidden aria-label="Clear">✕</button></label>
+        ${f ? `<div class="seg">${f.map(([k, l]) => `<button data-f="${k}" class="${st.filter === k ? 'on' : ''}">${l}</button>`).join('')}</div>`
+            : `<div class="chips">${['All', ...CATS].map(c => `<button class="chip ${st.cat === c ? 'on' : ''}" data-c="${esc(c)}">${esc(c)}<small>${catCount(c)}</small></button>`).join('')}</div>`}
+      </div>
+      <div class="body"><div class="content"></div><div class="index"></div><div class="toast"></div></div>
+      ${pick ? '<div class="footer" hidden><button class="btn"></button></div>' : '<div class="tabbar"><span><i></i>Today</span><span class="on"><i></i>Library</span><span><i></i>Settings</span></div>'}`;
+    const input = screen.querySelector('input'), clr = screen.querySelector('.clr');
+    input.value = st.q;
+    input.oninput = () => { st.q = input.value; clr.hidden = !st.q; render(); };
+    clr.onclick = () => { st.q = ''; input.value = ''; clr.hidden = true; render(); input.focus(); };
+    screen.querySelectorAll('[data-f]').forEach(b => b.onclick = () => {
+      st.filter = b.dataset.f; screen.querySelectorAll('[data-f]').forEach(x => x.classList.toggle('on', x === b)); render();
+    });
+    screen.querySelectorAll('[data-c]').forEach(b => b.onclick = () => {
+      st.cat = b.dataset.c; screen.querySelectorAll('[data-c]').forEach(x => x.classList.toggle('on', x === b)); render();
+    });
+    screen.querySelector('.glass.x')?.addEventListener('click', () => { st.sel.clear(); render(); toast('Closed'); });
+    screen.querySelector('.footer .btn')?.addEventListener('click', () => { toast(`Added ${st.sel.size} to the meal`); st.sel.clear(); render(); });
+    render();
+  }
+
+  function toast(msg) {
+    const t = screen.querySelector('.toast');
+    t.textContent = msg; t.classList.add('on');
+    clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('on'), 1400);
+  }
+
+  function rowHTML(it) {
+    const pick = st.mode === 'pick';
+    const sub = (opt === 'C' && st.q ? `<span class="cat">${esc(it.cat)}</span> · ` : '') + esc(it.sub);
+    return `<div class="row ${st.sel.has(it.id) ? 'sel' : ''}" data-id="${it.id}" role="button" tabindex="0">
+      <div class="main"><div class="nm"><span class="t">${highlight(it.name, st.q)}</span>${it.fav ? '<span class="star" aria-label="Favorite">★</span>' : ''}</div>
+      <div class="sub">${sub}</div></div>
+      ${pick ? '<span class="check" aria-hidden="true"></span>' : `<button class="logbtn" aria-label="Log ${esc(it.name)}">Log</button>`}
+    </div>`;
+  }
+
+  function render() {
+    const content = screen.querySelector('.content'), index = screen.querySelector('.index');
+    const pick = st.mode === 'pick';
+    let html = '', sections = [];
+    if (st.q.trim()) {
+      let base = pool();
+      if (opt === 'C' && st.cat !== 'All') base = base.filter(it => it.cat === st.cat);
+      const res = rank(base, st.q);
+      html = res.length
+        ? `<div class="sec-h"><span>Results</span><span class="why">${res.length} ranked</span></div><div class="group">${res.map(rowHTML).join('')}</div>`
+        : `<div class="empty">No saved item matches “${esc(st.q)}”.</div>`;
+      if (pick) html += `<div class="group" style="margin-top:16px"><div class="ai-row" data-ai>${ic.spark}Estimate “${esc(st.q)}” with AI</div></div>`;
+    } else {
+      sections = SECTIONS[opt](pool(), st);
+      html = sections.map((s, i) => `
+        ${s.head ? `<div class="sec-h" style="position:static"><span>${s.head}</span><span class="why">A–Z</span></div>` : ''}
+        <div class="sec-h ${s.letter ? 'letter' : ''}" data-sec="${s.key || ''}"><span>${esc(s.title)}</span>${s.why ? `<span class="why">${s.why}</span>` : s.letter ? '' : `<span class="why">${s.items.length}</span>`}</div>
+        <div class="group">${s.items.map(rowHTML).join('')}</div>`).join('');
+      if (!sections.length) html = '<div class="empty">Nothing here yet.</div>';
+    }
+    content.innerHTML = html;
+    const showIndex = INDEX[opt] && !st.q.trim() && sections.length;
+    content.classList.toggle('with-index', !!showIndex);
+    if (showIndex) {
+      const have = new Set(sections.filter(s => s.letter).map(s => s.title));
+      const keys = [...(sections.some(s => s.key === 'top') ? ['★'] : []), ...'ABCDEFGHIJKLMNOPQRSTUVWXYZ', '#'];
+      index.innerHTML = keys.map(k => {
+        const target = k === '★' ? 'top' : 'L' + k;
+        const on = k === '★' || have.has(k);
+        return `<button class="${on ? '' : 'off'}" data-jump="${target}" aria-label="Jump to ${k}">${k}</button>`;
+      }).join('');
+      index.querySelectorAll('[data-jump]').forEach(b => b.onclick = () => {
+        // Missing letter: jump to the next letter that exists, like UIKit's index.
+        let key = b.dataset.jump;
+        let el = content.querySelector(`[data-sec="${key}"]`);
+        if (!el && key.startsWith('L')) {
+          const next = [...have].sort().find(L => L > key.slice(1));
+          el = next && content.querySelector(`[data-sec="L${next}"]`);
+        }
+        // Sticky headers report their stuck position, so measure from the group below.
+        if (el) content.scrollTop = key === 'top' ? 0 : el.nextElementSibling.offsetTop - el.offsetHeight;
+      });
+    } else index.innerHTML = '';
+
+    content.querySelectorAll('.row').forEach(r => {
+      const it = ITEMS[+r.dataset.id];
+      r.onclick = e => {
+        if (pick) { st.sel.has(it.id) ? st.sel.delete(it.id) : st.sel.add(it.id); render(); }
+        else toast(e.target.closest('.logbtn') ? `Log ${it.name}` : `Open ${it.name}`);
+      };
+    });
+    content.querySelector('[data-ai]')?.addEventListener('click', () => toast('Opens the logger with this text'));
+    const footer = screen.querySelector('.footer');
+    if (footer) {
+      footer.hidden = !st.sel.size;
+      const kcal = [...st.sel].reduce((s, id) => s + ITEMS[id].kcal, 0);
+      footer.querySelector('.btn').textContent = `Add ${st.sel.size} item${st.sel.size === 1 ? '' : 's'} · ${kcal} kcal`;
+    }
+  }
+  build();
+  phones.push(render);
+}
+
+document.querySelectorAll('[data-phone]').forEach(mountPhone);
+const setSlot = s => {
+  SLOT = s;
+  document.querySelectorAll('[data-slot]').forEach(b => b.classList.toggle('on', b.dataset.slot === s));
+  phones.forEach(r => r());
+};
+document.querySelectorAll('[data-slot]').forEach(b => b.onclick = () => setSlot(b.dataset.slot));
+setSlot('m');
+
+// Self-check for the ranking rules.
+console.assert(rank(ITEMS, 'chi')[0].name.startsWith('Chicken'), 'prefix first');
+console.assert(rank(ITEMS, 'chiken').some(it => it.name === 'Chicken breast'), 'one typo');
+console.assert(rank(ITEMS, 'yog')[0].name === 'Yogurt parfait' && rank(ITEMS, 'yog')[1].name === 'Greek yogurt 2%', 'name start, then word start');
+</script>
+</body>
+</html>

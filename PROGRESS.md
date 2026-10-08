@@ -169,3 +169,12 @@ Checks to tap through on the iPhone:
 - Device build succeeded via `xcodebuild` without opening Xcode. Installed and launched `com.aliaksei.ezha` (1.0, build 1) on Aliaksei's iPhone 16 Pro using `devicectl`.
 - Used existing `EZHA/EZHA-Dev.entitlements` for Personal Team signing. This development build excludes Sign in with Apple; camera/meal interaction on the physical device was not automated.
 - Evidence: `.local/ai-verification/deployed-smoke.json`, `iphone-build.log`, `iphone-install.json`, and `iphone-launch.json`. No commit or push performed.
+
+
+## Library grouping and search (2026-10-08)
+
+- Chosen option: D in `docs/design/library-grouping/options.html`. Library tab and the logger's Library picker show "Usual" (current time of day), Favorites, and Recent, then every item in A–Z sections with the native section index. Favorites moved from the filter to a section.
+- Search ranks matches: name prefix, word prefix, substring, then one typo for terms of 5+ letters; ties by use, then recency. A picker search with no match offers "Estimate … with AI", which keeps picked items and adds the text to the description.
+- Backend: migration `20261008120000_saved_food_time_slots.sql` adds `uses_morning`, `uses_midday`, `uses_evening` to `saved_foods` and a `p_time_slot` parameter (default null) to `log_food_entry`. Counts start at 0, so "Usual" appears after 3 logs of an item in one time slot.
+- Verified: unit tests 70/70; `rpc_checks.sql` passed on local Supabase (slot counted once per entry); UI harness `UITests/run.sh` 15/15 with light, dark, and large-text screenshots inspected. Device build succeeded.
+- User authorized the remote migration and device install. `supabase db push --linked` applied the migration (remote in sync). The build was installed and launched on Aliaksei's iPhone 16 Pro with `devicectl`. Tapping through on the device was not automated.

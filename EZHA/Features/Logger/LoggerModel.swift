@@ -433,6 +433,12 @@ final class LoggerModel {
 
   // MARK: Items
 
+  /// Adds a food the Library did not have to the description, for an AI estimate.
+  func appendDescription(_ text: String) {
+    let current = state.text.trimmingCharacters(in: .whitespacesAndNewlines)
+    state.text = current.isEmpty ? text : "\(current)\n\(text)"
+  }
+
   func addLibraryItems(_ items: [LogItem], foodName: String?, mealIds: [UUID]) {
     state.items.append(contentsOf: items)
     for item in items {

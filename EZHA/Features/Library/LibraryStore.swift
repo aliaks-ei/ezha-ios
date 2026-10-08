@@ -106,10 +106,10 @@ final class LibraryStore {
     return mealId
   }
 
-  /// Marks foods as just used, so the list order updates before the next fetch.
+  /// Marks foods as just used, so the sections update before the next fetch.
   func markUsed(_ ids: [UUID]) {
     for id in ids {
-      if let index = foods.firstIndex(where: { $0.id == id }) { foods[index].lastUsedAt = .now }
+      if let index = foods.firstIndex(where: { $0.id == id }) { foods[index].recordUse() }
     }
   }
 
