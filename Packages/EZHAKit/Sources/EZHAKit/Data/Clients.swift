@@ -126,7 +126,7 @@ extension LoggingClient {
         "log_food_entry",
         params: RPCParams([
           "p_entry": payload.entry, "p_items": payload.items,
-          "p_used_food_ids": payload.usedFoodIds,
+          "p_used_food_ids": payload.usedFoodIds, "p_time_slot": payload.timeSlot,
         ])
       ).execute()
     },

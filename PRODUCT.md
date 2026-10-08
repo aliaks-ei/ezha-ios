@@ -22,7 +22,7 @@ AI nutrition is an estimate. Show unresolved preparation or portion information 
 
 ## Confirmed Decisions
 
-For the meal logger redesign on 7 October 2026, the user chose the first visual proposal in `docs/design/meal-logging/01-quiet-review.png` and authorized implementation. Logging remains available without answering an optional preparation question, with uncertainty visible.
+For the meal logger redesign on 7 October 2026, the user chose the first visual proposal (quiet review) and authorized implementation. Logging remains available without answering an optional preparation question, with uncertainty visible.
 
 ## Product Principles
 
@@ -35,7 +35,3 @@ For the meal logger redesign on 7 October 2026, the user chose the first visual 
 ## Brand and Accessibility
 
 Preserve the existing EZHA pink accent and native iOS controls. Use system text styles, semantic foreground colors, Dynamic Type, safe areas, and accessible control labels. Allow scrolling when content or text size requires it; fitting every possible case without scrolling is not a requirement.
-
-## Evidence
-
-The supplied screen, three visual proposals, and interaction specification are in `docs/design/meal-logging/`. Native implementation and simulator verification are scoped to this logger redesign; physical-device acceptance remains separate.

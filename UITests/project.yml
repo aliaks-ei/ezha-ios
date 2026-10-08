@@ -1,0 +1,58 @@
+# UI test harness: the app's views with fixture data, no network. See AGENTS.md.
+# run.sh regenerates EZHAUITests.xcodeproj with `xcodegen generate`.
+name: EZHAUITests
+options:
+  deploymentTarget:
+    iOS: "26.0"
+  defaultSourceDirectoryType: syncedFolder
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+    TARGETED_DEVICE_FAMILY: "1,2"
+    CODE_SIGNING_ALLOWED: NO
+packages:
+  EZHAKit:
+    path: ../Packages/EZHAKit
+targets:
+  HarnessApp:
+    type: application
+    platform: iOS
+    sources:
+      - path: ../EZHA
+        excludes:
+          [App/EZHAApp.swift, Info.plist, EZHA.entitlements, EZHA-Dev.entitlements, PrivacyInfo.xcprivacy]
+      - path: HarnessApp.swift
+      - path: Fixtures.swift
+    dependencies:
+      - package: EZHAKit
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.aliaksei.ezha.ui-harness
+        PRODUCT_MODULE_NAME: EZHA
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: Ezha Harness
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        INFOPLIST_KEY_NSPhotoLibraryUsageDescription: Verify meal-photo entry
+        INFOPLIST_KEY_NSCameraUsageDescription: Verify meal entry
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
+        "INFOPLIST_KEY_UISupportedInterfaceOrientations~ipad": "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
+  EZHAUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [LoggerUITests.swift, LibraryUITests.swift, AuditUITests.swift, UXImprovementUITests.swift, HarnessTestCase.swift]
+    dependencies:
+      - target: HarnessApp
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.aliaksei.ezha.ui-harness.tests
+schemes:
+  EZHAUITests:
+    build:
+      targets:
+        HarnessApp: all
+        EZHAUITests: [test]
+    test:
+      targets: [EZHAUITests]

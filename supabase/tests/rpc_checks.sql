@@ -164,6 +164,15 @@ select public.log_food_entry(
 select pg_temp.check(
   (select last_used_at is not null from public.saved_foods where name = 'Rice'),
   'log_food_entry sets last_used_at for used foods');
+select public.log_food_entry(
+  '{"id": "e0000000-0000-0000-0000-000000000006", "date": "2026-10-05", "input_type": "text", "calories": 130, "ai_source": "library"}',
+  '[{"name": "Rice", "grams": 100, "calories": 130}]', array['f0000000-0000-0000-0000-000000000001']::uuid[], 'evening');
+select public.log_food_entry(
+  '{"id": "e0000000-0000-0000-0000-000000000006", "date": "2026-10-05", "input_type": "text", "calories": 130, "ai_source": "library"}',
+  '[{"name": "Rice", "grams": 100, "calories": 130}]', array['f0000000-0000-0000-0000-000000000001']::uuid[], 'evening');
+select pg_temp.check(
+  (select (uses_morning, uses_midday, uses_evening) = (0, 0, 1) from public.saved_foods where name = 'Rice'),
+  'log_food_entry counts the time slot once per entry, and not without a slot');
 
 -- As user B, A's rows are invisible.
 select pg_temp.as_user('bbbbbbbb-0000-0000-0000-000000000002');

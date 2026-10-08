@@ -1,7 +1,7 @@
 import EZHAKit
 import SwiftUI
 
-/// Saved foods and meals: search, filters, favorites, quick log, edit, delete.
+/// Saved foods and meals: pinned sections, A–Z index, ranked search, quick log, edit, delete.
 struct LibraryView: View {
   @Environment(AppModel.self) private var appModel
   @State private var search = ""
@@ -13,21 +13,14 @@ struct LibraryView: View {
   @State private var favoriteBounce: [UUID: Int] = [:]
 
   private var store: LibraryStore { appModel.libraryStore }
-  private var foods: [SavedFood] { filter.apply(to: store.sortedFoods, search: search) }
+  private var foods: [SavedFood] { filter.apply(to: store.foods, search: search) }
+  private var isSearching: Bool { !search.trimmingCharacters(in: .whitespaces).isEmpty }
 
   var body: some View {
     NavigationStack {
       List {
         Section {
-          Picker("Filter", selection: $filter) {
-            Text("All").tag(LibraryFilter.all)
-            Text("Foods").tag(LibraryFilter.foods)
-            Text("Meals").tag(LibraryFilter.meals)
-            Text("Favorites").tag(LibraryFilter.favorites)
-          }
-          .pickerStyle(.segmented)
-          .listRowBackground(Color.clear)
-          .listRowInsets(EdgeInsets())
+          LibraryFilterPicker(filter: $filter)
         }
         if let error = store.errorMessage, store.hasLoaded {
           Section {
@@ -37,10 +30,15 @@ struct LibraryView: View {
           .listRowInsets(EdgeInsets())
         }
         if store.hasLoaded {
-          Section {
-            ForEach(foods) { food in row(food) }
+          if isSearching {
+            Section {
+              ForEach(foods) { food in row(food) }
+            }
+            .listRowBackground(Color.surface)
+          } else {
+            LibrarySections(sections: LibraryFilter.sections(foods)) { food in row(food) }
+              .listRowBackground(Color.surface)
           }
-          .listRowBackground(Color.surface)
         } else if store.isLoading {
           Section {
             ForEach(PreviewData.foods) { food in
@@ -51,6 +49,7 @@ struct LibraryView: View {
           .accessibilityLabel("Loading")
         }
       }
+      .listSectionIndexVisibility(.visible)
       .scrollContentBackground(.hidden)
       .background(Color.canvas)
       .overlay { emptyState }
@@ -58,7 +57,8 @@ struct LibraryView: View {
       .navigationTitle("Library")
       .toolbar {
         ToolbarItem(placement: .topBarTrailing) {
-          Button("Add food", systemImage: "plus") { isAddPresented = true }
+          Button("Add to Library", systemImage: "square.and.pencil") { isAddPresented = true }
+            .accessibilityIdentifier("addToLibrary")
         }
       }
       .refreshable { await store.load() }
@@ -96,9 +96,7 @@ struct LibraryView: View {
             .buttonStyle(.glassProminent)
         }
       } else {
-        ContentUnavailableView(
-          "Nothing here yet", systemImage: filter == .favorites ? "star" : "books.vertical",
-          description: Text(filter == .favorites ? "Swipe right on an item to favorite it." : ""))
+        ContentUnavailableView("Nothing here yet", systemImage: "books.vertical")
       }
     } else if !store.hasLoaded, let error = store.errorMessage {
       ContentUnavailableView {
@@ -158,6 +156,55 @@ struct LibraryView: View {
     } catch {
       appModel.showToast(OnlineError.message(for: error))
     }
+  }
+}
+
+/// All / Foods / Meals. Favorites is a section, not a filter.
+struct LibraryFilterPicker: View {
+  @Binding var filter: LibraryFilter
+
+  var body: some View {
+    Picker("Filter", selection: $filter) {
+      Text("All").tag(LibraryFilter.all)
+      Text("Foods").tag(LibraryFilter.foods)
+      Text("Meals").tag(LibraryFilter.meals)
+    }
+    .pickerStyle(.segmented)
+    .listRowBackground(Color.clear)
+    .listRowInsets(EdgeInsets())
+  }
+}
+
+/// Library sections for a `List`. The first pinned section is ★ in the index, letters follow.
+struct LibrarySections<Row: View>: View {
+  var sections: [LibrarySection]
+  @ViewBuilder var row: (SavedFood) -> Row
+
+  var body: some View {
+    ForEach(sections) { section in
+      Section {
+        ForEach(section.foods) { food in row(food) }
+      } header: {
+        header(section.kind)
+      }
+      .sectionIndexLabel(indexLabel(section))
+    }
+  }
+
+  private func header(_ kind: LibrarySection.Kind) -> Text {
+    switch kind {
+    case .usual(.morning): Text("Usual in the morning")
+    case .usual(.midday): Text("Usual at midday")
+    case .usual(.evening): Text("Usual in the evening")
+    case .favorites: Text("Favorites")
+    case .recent: Text("Recent")
+    case .letter(let letter): Text(verbatim: letter)
+    }
+  }
+
+  private func indexLabel(_ section: LibrarySection) -> String? {
+    if case .letter(let letter) = section.kind { return letter }
+    return section.id == sections.first?.id ? "★" : nil
   }
 }
 

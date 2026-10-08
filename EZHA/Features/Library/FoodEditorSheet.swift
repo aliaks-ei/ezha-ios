@@ -54,7 +54,7 @@ struct FoodFormFields: View {
       }
     }
     Section {
-      MacroFields(model: $model.macros)
+      MacroFields(model: $model.macros, basis: "per 100 grams")
     } header: {
       Text("Nutrition per 100 g")
     } footer: {
@@ -146,6 +146,9 @@ struct FoodEditorSheet: View {
   @State private var form: FoodFormModel
   @State private var errorMessage: String?
   @State private var isSaving = false
+  @State private var isDiscardPresented = false
+
+  private var isDirty: Bool { form != FoodFormModel(food: food) }
 
   init(food: SavedFood) {
     self.food = food
@@ -164,12 +167,20 @@ struct FoodEditorSheet: View {
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {
-          Button("Cancel", systemImage: "xmark") { dismiss() }
+          Button("Cancel", systemImage: "xmark") {
+            if isDirty { isDiscardPresented = true } else { dismiss() }
+          }
+          .disabled(isSaving)
         }
         ToolbarItem(placement: .confirmationAction) {
           Button("Save") { Task { await save() } }.disabled(isSaving)
         }
       }
+    }
+    .interactiveDismissDisabled(isDirty || isSaving)
+    .alert("Discard changes?", isPresented: $isDiscardPresented) {
+      Button("Keep editing", role: .cancel) {}
+      Button("Discard changes", role: .destructive) { dismiss() }
     }
   }
 
@@ -208,6 +219,12 @@ struct AddFoodSheet: View {
   @State private var isCameraPresented = false
   @State private var isScannerPresented = false
   @State private var consentAction: (() -> Void)?
+  @State private var isDiscardPresented = false
+
+  private var isDirty: Bool {
+    form != FoodFormModel() || photo.imageData != nil || !photo.name.isEmpty
+      || photo.display != MacroFieldsModel() || !photo.labelGramsText.isEmpty
+  }
 
   var body: some View {
     NavigationStack {
@@ -233,7 +250,10 @@ struct AddFoodSheet: View {
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {
-          Button("Cancel", systemImage: "xmark") { dismiss() }
+          Button("Cancel", systemImage: "xmark") {
+            if isDirty { isDiscardPresented = true } else { dismiss() }
+          }
+          .disabled(saver.isSaving || photo.isEstimating)
         }
         ToolbarItem(placement: .confirmationAction) {
           Button("Save") { Task { await save() } }
@@ -262,6 +282,11 @@ struct AddFoodSheet: View {
           .ignoresSafeArea()
       }
       .aiConsentAlert($consentAction)
+    }
+    .interactiveDismissDisabled(isDirty || saver.isSaving || photo.isEstimating)
+    .alert("Discard this food?", isPresented: $isDiscardPresented) {
+      Button("Keep editing", role: .cancel) {}
+      Button("Discard changes", role: .destructive) { dismiss() }
     }
   }
 
@@ -336,7 +361,9 @@ struct AddFoodSheet: View {
       case .manual: form.draft
       case .photo:
         LibraryDrafts.photoDraft(
-          name: photo.name, display: photo.display.optionalValues, isLabelPhoto: photo.isLabel,
+          name: photo.name,
+          display: photo.display.values == nil ? [] : photo.display.optionalValues,
+          isLabelPhoto: photo.isLabel,
           labelGrams: parseNumberInput(photo.labelGramsText))
       }
     switch result {

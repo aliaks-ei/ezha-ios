@@ -12,6 +12,10 @@ struct MealEditorSheet: View {
   @State private var isSaving = false
   @State private var isFoodPickerPresented = false
   @State private var errorMessage: String?
+  @State private var originalItems: [LogItem] = []
+  @State private var isDiscardPresented = false
+
+  private var isDirty: Bool { name != meal.name || items != originalItems }
 
   init(meal: SavedFood) {
     self.meal = meal
@@ -20,7 +24,11 @@ struct MealEditorSheet: View {
 
   private var canSave: Bool {
     !name.trimmingCharacters(in: .whitespaces).isEmpty && !isSaving && !isLoading
-      && !LogItemMath.mealIngredients(from: items).isEmpty
+      && !items.isEmpty
+      && items.allSatisfy {
+        NumericInput.portionError($0.gramsText) == nil && !$0.isNutritionMissing
+          && !$0.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+      }
   }
 
   var body: some View {
@@ -47,9 +55,11 @@ struct MealEditorSheet: View {
                   onStep: { delta in
                     item.gramsText = LogItemMath.step(item.gramsText, by: delta).text
                   },
-                  onFocusLost: {
-                    if LogItemMath.validGrams(item.gramsText) == nil { item.gramsText = "100" }
-                  })
+                  onFocusLost: {},
+                  accessibilityName: String(localized: "Portion of \(item.name) in grams"))
+              }
+              if let error = NumericInput.portionError(item.gramsText) {
+                Text(error).font(.footnote).foregroundStyle(Color.danger)
               }
               if item.isNutritionMissing {
                 Text("Nutrition is missing. Remove this ingredient.")
@@ -80,7 +90,9 @@ struct MealEditorSheet: View {
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {
-          Button("Cancel", systemImage: "xmark") { dismiss() }
+          Button("Cancel", systemImage: "xmark") {
+            if isDirty { isDiscardPresented = true } else { dismiss() }
+          }.disabled(isSaving)
         }
         ToolbarItem(placement: .confirmationAction) {
           Button("Save") { Task { await save() } }.disabled(!canSave)
@@ -89,7 +101,12 @@ struct MealEditorSheet: View {
       .sheet(isPresented: $isFoodPickerPresented) {
         FoodPicker { food in items.append(LogItemMath.fromSavedFood(food)) }
       }
-      .task { await load() }
+      .task { if isLoading { await load() } }
+    }
+    .interactiveDismissDisabled(isDirty || isSaving)
+    .alert("Discard changes?", isPresented: $isDiscardPresented) {
+      Button("Keep editing", role: .cancel) {}
+      Button("Discard changes", role: .destructive) { dismiss() }
     }
   }
 
@@ -97,6 +114,7 @@ struct MealEditorSheet: View {
     defer { isLoading = false }
     do {
       items = LogItemMath.fromSavedMeal(try await appModel.libraryStore.ingredients(for: meal))
+      originalItems = items
     } catch {
       errorMessage = OnlineError.message(for: error)
     }

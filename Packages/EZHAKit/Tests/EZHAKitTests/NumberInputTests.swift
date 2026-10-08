@@ -14,3 +14,23 @@ struct NumberInputTests {
     #expect(parseNumberInput("inf") == nil)
   }
 }
+
+struct NumericInputTests {
+  @Test func rejectsInvalidPortionsWithoutClamping() {
+    for text in ["", " ", "abc", "NaN", "inf", "-1", "0", "5000.1", "99999"] {
+      #expect(NumericInput.portionError(text) != nil)
+    }
+    for text in ["0.1", "150,5", "5000"] {
+      #expect(NumericInput.portionError(text) == nil)
+    }
+  }
+
+  @Test func nutritionAllowsZeroAndDecimalCommaButRejectsInvalidEdits() {
+    for text in ["0", "31,5", "100000"] {
+      #expect(NumericInput.nutritionError(text) == nil)
+    }
+    for text in ["", "abc", "NaN", "-1", "100001", "1e309"] {
+      #expect(NumericInput.nutritionError(text) != nil)
+    }
+  }
+}

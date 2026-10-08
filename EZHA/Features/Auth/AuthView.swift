@@ -14,63 +14,73 @@ struct AuthView: View {
   var body: some View {
     ZStack {
       BrandBackground()
-      VStack(spacing: 24) {
-        Spacer()
-        VStack(spacing: 8) {
-          Text("Ezha")
-            .font(.system(.largeTitle, design: .rounded, weight: .bold))
-          Text("Smarter meal logging with AI estimates you can edit.")
-            .font(.body.weight(.medium))
-            .multilineTextAlignment(.center)
-            .foregroundStyle(.white.opacity(0.92))
-        }
-        .foregroundStyle(.white)
-        .shadow(color: .black.opacity(0.25), radius: 8, y: 2)
-        .padding(.horizontal)
-        Spacer()
-        VStack(spacing: 12) {
-          SignInWithAppleButton(.continue) { request in
-            nonce = Self.randomNonce()
-            request.requestedScopes = [.email]
-            request.nonce = Self.sha256(nonce)
-          } onCompletion: { result in
-            Task { await completeApple(result) }
-          }
-          .signInWithAppleButtonStyle(.black)
-          .frame(height: 50)
-          .clipShape(.capsule)
-
-          Button {
-            Task { await run { try await appModel.clients.account.signInWithGoogle() } }
-          } label: {
-            Label("Continue with Google", systemImage: "globe")
-              .frame(maxWidth: .infinity, minHeight: 36)
-          }
-          .buttonStyle(.glass)
-          .controlSize(.large)
-          .foregroundStyle(.primary)
-
-          Button {
-            isEmailSheetPresented = true
-          } label: {
-            Label("Continue with email", systemImage: "envelope")
-              .frame(maxWidth: .infinity, minHeight: 36)
-          }
-          .buttonStyle(.glass)
-          .controlSize(.large)
-          .foregroundStyle(.primary)
-
-          if let errorMessage {
-            Text(errorMessage)
-              .font(.footnote)
-              .foregroundStyle(Color.danger)
+      ScrollView {
+        VStack(spacing: 24) {
+          Spacer(minLength: 36)
+          VStack(spacing: 8) {
+            Text("Ezha")
+              .font(.system(.largeTitle, design: .rounded, weight: .bold))
+            Text("Smarter meal logging with AI estimates you can edit.")
+              .font(.body.weight(.medium))
               .multilineTextAlignment(.center)
+              .foregroundStyle(.white.opacity(0.92))
           }
+          .foregroundStyle(.white)
+          .shadow(color: .black.opacity(0.25), radius: 8, y: 2)
+          .padding(.horizontal)
+          Spacer(minLength: 36)
+          VStack(spacing: 12) {
+            SignInWithAppleButton(.continue) { request in
+              nonce = Self.randomNonce()
+              request.requestedScopes = [.email]
+              request.nonce = Self.sha256(nonce)
+            } onCompletion: { result in
+              Task { await completeApple(result) }
+            }
+            .signInWithAppleButtonStyle(.black)
+            .frame(height: 50)
+            .clipShape(.capsule)
+
+            Button {
+              Task { await run { try await appModel.clients.account.signInWithGoogle() } }
+            } label: {
+              Label("Google", systemImage: "globe")
+                .frame(maxWidth: .infinity, minHeight: 44)
+            }
+            .buttonStyle(.glass)
+            .controlSize(.large)
+            .foregroundStyle(.primary)
+            .accessibilityLabel("Continue with Google")
+            .accessibilityIdentifier("googleSignIn")
+
+            Button {
+              isEmailSheetPresented = true
+            } label: {
+              Label("Email", systemImage: "envelope")
+                .frame(maxWidth: .infinity, minHeight: 44)
+            }
+            .buttonStyle(.glass)
+            .controlSize(.large)
+            .foregroundStyle(.primary)
+
+            .accessibilityLabel("Continue with email")
+            .accessibilityIdentifier("emailSignIn")
+
+            if let errorMessage {
+              Text(errorMessage)
+                .font(.footnote)
+                .foregroundStyle(Color.danger)
+                .multilineTextAlignment(.center)
+                .padding(12)
+                .background(Color.surface, in: .rect(cornerRadius: 12))
+            }
+          }
+          .disabled(isWorking)
+          .padding(.horizontal, 24)
+          .padding(.bottom, 24)
+          .frame(maxWidth: 500)
         }
-        .disabled(isWorking)
-        .padding(.horizontal, 24)
-        .padding(.bottom, 24)
-        .frame(maxWidth: 500)
+        .frame(maxWidth: .infinity)
       }
     }
     .sheet(isPresented: $isEmailSheetPresented) {

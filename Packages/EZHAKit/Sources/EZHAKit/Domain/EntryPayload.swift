@@ -18,16 +18,22 @@ public struct LogPayload: Codable, Sendable, Hashable {
   public var entry: FoodEntry
   public var items: [FoodEntryItem]
   public var usedFoodIds: [UUID]
+  /// Local time of day, counted per used food. Nil in outbox payloads saved before it existed.
+  public var timeSlot: TimeSlot?
 
-  public init(entry: FoodEntry, items: [FoodEntryItem], usedFoodIds: [UUID]) {
+  public init(
+    entry: FoodEntry, items: [FoodEntryItem], usedFoodIds: [UUID], timeSlot: TimeSlot? = nil
+  ) {
     self.entry = entry
     self.items = items
     self.usedFoodIds = usedFoodIds
+    self.timeSlot = timeSlot
   }
 
   enum CodingKeys: String, CodingKey {
     case entry, items
     case usedFoodIds = "used_food_ids"
+    case timeSlot = "time_slot"
   }
 }
 
@@ -98,7 +104,8 @@ public enum EntryPayload {
     {
       used.append(id)
     }
-    return LogPayload(entry: entry, items: rows, usedFoodIds: used)
+    return LogPayload(
+      entry: entry, items: rows, usedFoodIds: used, timeSlot: TimeSlot(date: createdAt))
   }
 }
 

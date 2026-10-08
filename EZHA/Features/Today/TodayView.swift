@@ -6,19 +6,26 @@ struct TodayView: View {
   var openLogger: (DateKey?) -> Void
   @Environment(AppModel.self) private var appModel
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
-  @State private var direction = Edge.trailing
   @State private var isCalendarPresented = false
-  @State private var bounce = 0
+
+  /// Pages from a year back (or the selected day, if older) to today.
+  private var days: [DateKey] {
+    let today = appModel.today
+    let first = min(appModel.selectedDate, today.adding(days: -365))
+    return Array(sequence(first: first) { $0 < today ? $0.adding(days: 1) : nil })
+  }
 
   var body: some View {
     @Bindable var appModel = appModel
     let date = appModel.selectedDate
     NavigationStack {
-      ZStack {
-        DayContent(date: date, changeDay: changeDay, openLogger: openLogger)
-          .id(date)
-          .transition(reduceMotion ? .opacity : .push(from: direction))
+      // Paging view: swipe right for the previous day, left for the next one.
+      TabView(selection: $appModel.selectedDate) {
+        ForEach(days) { day in
+          DayContent(date: day, openLogger: openLogger).tag(day)
+        }
       }
+      .tabViewStyle(.page(indexDisplayMode: .never))
       .background {
         // One full-screen layer, so the bar area and the content share the same gradient.
         BrandBackground(intensity: 0.18)
@@ -40,9 +47,7 @@ struct TodayView: View {
             .popover(isPresented: $isCalendarPresented) { calendar }
         }
       }
-      .task(id: date) { await appModel.dayStore.load(date) }
       .sensoryFeedback(.selection, trigger: date)
-      .sensoryFeedback(.impact(weight: .light), trigger: bounce)
     }
   }
 
@@ -73,24 +78,9 @@ struct TodayView: View {
     .presentationCompactAdaptation(.popover)
   }
 
-  private func changeDay(_ delta: Int) {
-    let current = appModel.selectedDate
-    if delta > 0 {
-      guard current < appModel.today else {
-        bounce += 1
-        return
-      }
-      goTo(current.next(today: appModel.today))
-    } else {
-      goTo(current.previous())
-    }
-  }
-
   private func goTo(_ date: DateKey) {
     let target = min(date, appModel.today)
-    guard target != appModel.selectedDate else { return }
-    direction = target < appModel.selectedDate ? .leading : .trailing
-    withAnimation(reduceMotion ? .easeInOut(duration: 0.2) : .smooth(duration: 0.35)) {
+    withAnimation(reduceMotion ? nil : .smooth(duration: 0.35)) {
       appModel.selectedDate = target
     }
   }
@@ -99,7 +89,6 @@ struct TodayView: View {
 /// The list for one day.
 private struct DayContent: View {
   var date: DateKey
-  var changeDay: (Int) -> Void
   var openLogger: (DateKey?) -> Void
 
   @Environment(AppModel.self) private var appModel
@@ -129,7 +118,6 @@ private struct DayContent: View {
           }
         }
         .listRowBackground(Color.surface)
-        .gesture(swipe)
         entriesSection(bundle)
       } else if state == .loading || state == .idle {
         placeholder
@@ -151,22 +139,13 @@ private struct DayContent: View {
       await appModel.sync.run()
       await store.load(date, force: true)
     }
+    .task { await store.load(date) }
     .sheet(isPresented: $isTargetSheetPresented) {
       if let bundle { TargetSheet(date: date, bundle: bundle) }
     }
     .sheet(item: $detail) { entry in
       EntryDetailSheet(entry: entry)
     }
-  }
-
-  private var swipe: some Gesture {
-    DragGesture(minimumDistance: 30)
-      .onEnded { value in
-        guard abs(value.translation.width) > abs(value.translation.height) * 1.5,
-          abs(value.translation.width) > 60
-        else { return }
-        changeDay(value.translation.width > 0 ? -1 : 1)
-      }
   }
 
   @ViewBuilder
@@ -183,7 +162,6 @@ private struct DayContent: View {
             .buttonStyle(.borderedProminent)
         }
         .listRowBackground(Color.clear)
-        .gesture(swipe)
       } else {
         ForEach(bundle.entries) { entry in
           Button {
