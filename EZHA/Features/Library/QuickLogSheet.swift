@@ -12,6 +12,9 @@ struct QuickLogSheet: View {
   @State private var isLoading = false
   @State private var isSaving = false
   @State private var errorMessage: String?
+  @State private var detent = PresentationDetent.medium
+  @State private var isIngredientsExpanded = false
+  @State private var isEditing = false
 
   init(food: SavedFood) {
     self.food = food
@@ -20,6 +23,10 @@ struct QuickLogSheet: View {
         ? "1" : Macros.format(LogItemMath.defaultGrams(food), maxFractionDigits: 1))
   }
 
+  /// The latest saved version, so favorite and edits show at once.
+  private var current: SavedFood {
+    appModel.libraryStore.foods.first { $0.id == food.id } ?? food
+  }
   private var quantity: Double? { parseNumberInput(quantityText) }
   private var items: [LogItem] {
     LogItemMath.quickLogItems(base: baseItems, isMeal: food.isMeal, quantity: quantity ?? 0)
@@ -46,7 +53,7 @@ struct QuickLogSheet: View {
                 if (quantity ?? 0) <= 0 {
                   quantityText =
                     food.isMeal
-                    ? "1" : Macros.format(LogItemMath.defaultGrams(food), maxFractionDigits: 1)
+                    ? "1" : Macros.format(LogItemMath.defaultGrams(current), maxFractionDigits: 1)
                 }
               },
               unit: food.isMeal ? "portions" : "g",
@@ -61,7 +68,16 @@ struct QuickLogSheet: View {
         }
         if food.isMeal && !items.isEmpty {
           Section {
-            DisclosureGroup("Ingredients") {
+            DisclosureGroup(
+              "Ingredients",
+              isExpanded: Binding(
+                get: { isIngredientsExpanded },
+                set: {
+                  isIngredientsExpanded = $0
+                  // The list does not fit the medium sheet.
+                  if $0 { detent = .large }
+                })
+            ) {
               ForEach(items) { item in
                 HStack {
                   Text(item.name)
@@ -83,12 +99,29 @@ struct QuickLogSheet: View {
           Section { Text(errorMessage).foregroundStyle(Color.danger) }
         }
       }
-      .navigationTitle(food.name)
+      .navigationTitle(current.name)
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {
           Button("Close", systemImage: "xmark") { dismiss() }
         }
+        ToolbarItem(placement: .topBarTrailing) {
+          Button(
+            current.isFavorite ? "Unfavorite" : "Favorite",
+            systemImage: current.isFavorite ? "star.fill" : "star"
+          ) {
+            Task { await toggleFavorite() }
+          }
+          .tint(Color.brandAccent)
+          .accessibilityIdentifier("favoriteButton")
+        }
+        ToolbarItem(placement: .topBarTrailing) {
+          Button("Edit") { isEditing = true }
+            .accessibilityIdentifier("editButton")
+        }
+      }
+      .sheet(isPresented: $isEditing, onDismiss: { Task { await loadItems() } }) {
+        if current.isMeal { MealEditorSheet(meal: current) } else { FoodEditorSheet(food: current) }
       }
       .safeAreaInset(edge: .bottom) {
         Button {
@@ -114,12 +147,13 @@ struct QuickLogSheet: View {
       }
       .task { await loadItems() }
     }
-    .presentationDetents(dynamicTypeSize.isAccessibilitySize ? [.large] : [.medium, .large])
+    .presentationDetents(
+      dynamicTypeSize.isAccessibilitySize ? [.large] : [.medium, .large], selection: $detent)
   }
 
   private func loadItems() async {
     guard food.isMeal else {
-      baseItems = [LogItemMath.fromSavedFood(food, grams: 100)]
+      baseItems = [LogItemMath.fromSavedFood(current, grams: 100)]
       return
     }
     isLoading = true
@@ -135,12 +169,20 @@ struct QuickLogSheet: View {
     }
   }
 
+  private func toggleFavorite() async {
+    do {
+      try await appModel.libraryStore.toggleFavorite(current)
+    } catch {
+      appModel.showToast(OnlineError.message(for: error))
+    }
+  }
+
   private func log() async {
     isSaving = true
     defer { isSaving = false }
     let payload = EntryPayload.build(
       date: appModel.selectedDate, imagePath: nil, items: items,
-      sources: UsedSources(usedLibrary: true), isLabelPhoto: false, inputTextOverride: food.name,
+      sources: UsedSources(usedLibrary: true), isLabelPhoto: false, inputTextOverride: current.name,
       extraUsedFoodIds: [food.id])
     do {
       let result = try await appModel.dayStore.log(payload)

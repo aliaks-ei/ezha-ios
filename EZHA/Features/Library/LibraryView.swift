@@ -98,7 +98,7 @@ struct LibraryView: View {
       } else {
         ContentUnavailableView(
           "Nothing here yet", systemImage: filter == .favorites ? "star" : "books.vertical",
-          description: Text(filter == .favorites ? "Swipe right on an item to favorite it." : ""))
+          description: Text(filter == .favorites ? "Open an item and tap the star to favorite it." : ""))
       }
     } else if !store.hasLoaded, let error = store.errorMessage {
       ContentUnavailableView {
