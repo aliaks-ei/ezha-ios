@@ -1,11 +1,19 @@
 import SwiftUI
 
-/// A short message with an optional action, shown at the bottom for 4 s.
+/// A short message with an optional action, shown at the bottom for 4 s, or for the undo
+/// window when it has an action.
 struct ToastMessage: Identifiable, Equatable {
   let id = UUID()
   var text: String
   var actionTitle: String?
   var action: (@MainActor () -> Void)?
+
+  /// How long an action stays available. Longer with VoiceOver, so there is time to reach it.
+  @MainActor static var undoWindow: Duration {
+    UIAccessibility.isVoiceOverRunning ? .seconds(10) : .seconds(5)
+  }
+
+  @MainActor var duration: Duration { action == nil ? .seconds(4) : Self.undoWindow }
 
   static func == (lhs: ToastMessage, rhs: ToastMessage) -> Bool { lhs.id == rhs.id }
 }
@@ -41,7 +49,7 @@ struct ToastOverlay: View {
         .transition(reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
         .task(id: toast.id) {
           AccessibilityNotification.Announcement(toast.text).post()
-          try? await Task.sleep(for: .seconds(4))
+          try? await Task.sleep(for: toast.duration)
           if self.toast?.id == toast.id { self.toast = nil }
         }
       }

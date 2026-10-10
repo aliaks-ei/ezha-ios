@@ -51,6 +51,64 @@ final class LibraryUITests: HarnessTestCase {
     capture("library-large-text")
   }
 
+  /// Drags a row part of the way left, so its swipe actions show but do not run.
+  func revealActions(_ name: String) {
+    let row = app.cells.containing(.staticText, identifier: name).firstMatch
+    XCTAssertTrue(row.waitForExistence(timeout: 5))
+    row.coordinate(withNormalizedOffset: CGVector(dx: 0.8, dy: 0.5))
+      .press(
+        forDuration: 0.05,
+        thenDragTo: row.coordinate(withNormalizedOffset: CGVector(dx: 0.45, dy: 0.5)),
+        withVelocity: .slow, thenHoldForDuration: 0.3)
+  }
+
+  /// Whether a row with this name is in the "Usual" section. Every food is also listed under
+  /// its letter, further down.
+  func isUsual(_ name: String) -> Bool {
+    app.staticTexts.matching(identifier: name).allElementsBoundByIndex.contains {
+      $0.frame.minY < header("Favorites").frame.minY
+    }
+  }
+
+  func testSwipeRevealsDeleteThenDeletesWithUndo() {
+    for (name, dark) in [("light", false), ("dark", true)] {
+      launch("libraryTab", dark: dark)
+      XCTAssertTrue(header(usualHeader).waitForExistence(timeout: 10))
+      for (position, food) in [("first", "Greek yogurt"), ("middle", "Flat white")] {
+        revealActions(food)
+        XCTAssertTrue(app.buttons["Delete"].waitForExistence(timeout: 3))
+        capture("library-swipe-\(position)-\(name)")
+        app.staticTexts[usualHeader].tap()
+        XCTAssertTrue(app.buttons["Delete"].waitForNonExistence(timeout: 3))
+      }
+      revealActions("Banana")
+      app.buttons["Delete"].tap()
+      // No confirmation: the row goes at once and the toast offers Undo.
+      XCTAssertFalse(app.sheets.firstMatch.exists, "no confirmation")
+      let undo = app.buttons["Undo"]
+      XCTAssertTrue(undo.waitForExistence(timeout: 3))
+      XCTAssertTrue(app.staticTexts["Deleted “Banana”"].exists)
+      XCTAssertFalse(isUsual("Banana"), "row goes at once")
+      capture("library-deleted-toast-\(name)")
+      undo.tap()
+      XCTAssertTrue(undo.waitForNonExistence(timeout: 3))
+      XCTAssertTrue(isUsual("Banana"), "undo restores")
+    }
+  }
+
+  func testDeleteWithoutUndoStaysDeletedAfterToast() {
+    launch("libraryTab")
+    XCTAssertTrue(header(usualHeader).waitForExistence(timeout: 10))
+    revealActions("Banana")
+    app.buttons["Delete"].tap()
+    let undo = app.buttons["Undo"]
+    XCTAssertTrue(undo.waitForExistence(timeout: 3))
+    XCTAssertTrue(undo.waitForNonExistence(timeout: 12), "toast closes after the undo window")
+    sleep(1)
+    XCTAssertFalse(isUsual("Banana"), "delete committed")
+    XCTAssertFalse(app.buttons["Undo"].exists, "no error toast")
+  }
+
   func testLetterIndexJumpsToSection() {
     launch("libraryTab")
     XCTAssertTrue(header(usualHeader).waitForExistence(timeout: 10))
@@ -99,6 +157,33 @@ final class LibraryUITests: HarnessTestCase {
     capture("picker-search-selected")
     add.tap()
     XCTAssertTrue(app.staticTexts["Yogurt parfait"].waitForExistence(timeout: 5))
+  }
+
+  func testPickerActionBarFloatsInAllAppearances() {
+    let appearances = [("light", false, false), ("dark", true, false), ("large", false, true)]
+    for (name, dark, large) in appearances {
+      launch("entry", dark: dark, large: large)
+      XCTAssertTrue(app.buttons["attachLibrary"].waitForExistence(timeout: 10))
+      app.buttons["attachLibrary"].tap()
+      let yogurt = app.staticTexts["Greek yogurt"].firstMatch
+      XCTAssertTrue(yogurt.waitForExistence(timeout: 5))
+      yogurt.tap()
+      let add = app.buttons["addSelected"]
+      let review = app.buttons["reviewSelection"]
+      XCTAssertTrue(add.waitForExistence(timeout: 3))
+      XCTAssertTrue(add.isHittable && review.isHittable, name)
+      XCTAssertEqual(add.frame.midY, review.frame.midY, accuracy: 2, "one row (\(name))")
+      XCTAssertEqual(add.frame.height, review.frame.height, accuracy: 2, "same height (\(name))")
+      // The search field sits 5 pt inside its glass capsule, 4 pt from the top and bottom.
+      let search = app.searchFields.firstMatch.frame.insetBy(dx: -5, dy: -4)
+      XCTAssertEqual(review.frame.minX, search.minX, accuracy: 1, "left edge (\(name))")
+      XCTAssertEqual(add.frame.maxX, search.maxX, accuracy: 1, "right edge (\(name))")
+      if !large {
+        XCTAssertEqual(add.frame.height, search.height, accuracy: 1, "search height (\(name))")
+      }
+      capture("picker-action-bar-\(name)")
+      app.terminate()
+    }
   }
 
   func testPickerAddsUsualItemAndOffersAIForUnknownFood() {

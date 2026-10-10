@@ -16,6 +16,9 @@ struct LibraryPickerView: View {
   @State private var loadingId: UUID?
   @State private var errorMessage: String?
   @State private var isSelectionPresented = false
+  /// Height of the bottom actions: the search bar's height, scaled with text, so both buttons
+  /// stay the same size and share the search bar's corner radius.
+  @ScaledMetric(relativeTo: .headline) private var actionHeight: CGFloat = 46
 
   private var store: LibraryStore { appModel.libraryStore }
   private var foods: [SavedFood] { filter.apply(to: store.foods, search: search) }
@@ -76,17 +79,22 @@ struct LibraryPickerView: View {
     .toolbar {
       DefaultToolbarItem(kind: .search, placement: .bottomBar)
     }
-    .safeAreaInset(edge: .bottom) {
+    // Floating glass actions: the list scrolls under them with the system edge effect.
+    .safeAreaBar(edge: .bottom) {
       if !items.isEmpty {
-        HStack(spacing: 12) {
-          selectionButton
-          addButton
+        GlassEffectContainer(spacing: 12) {
+          HStack(spacing: 12) {
+            selectionButton
+            addButton
+          }
         }
-        .controlSize(.large)
-        .padding()
-        .background(Color.surface)
+        // Same side inset as the search bar in the bottom toolbar below.
+        .padding(.horizontal, 28)
+        .padding(.bottom, 8)
+        .transition(.move(edge: .bottom).combined(with: .opacity))
       }
     }
+    .animation(.smooth(duration: 0.3), value: items.isEmpty)
     .navigationDestination(isPresented: $isSelectionPresented) {
       Group {
         List {
@@ -123,8 +131,11 @@ struct LibraryPickerView: View {
       isSelectionPresented = true
     } label: {
       Image(systemName: "list.bullet")
-        .frame(minWidth: 44, minHeight: 44)
-        .contentShape(.rect)
+        .font(.headline)
+        .foregroundStyle(Color.accentColor)
+        .frame(width: actionHeight, height: actionHeight)
+        .contentShape(.circle)
+        .glassEffect(.regular.interactive(), in: .circle)
     }
     .buttonStyle(.plain)
     .accessibilityLabel("Review selected foods")
@@ -147,8 +158,13 @@ struct LibraryPickerView: View {
       }
       .font(.headline)
       .monospacedDigit()
+      .foregroundStyle(.white)
+      .padding(.horizontal)
+      .frame(maxWidth: .infinity, minHeight: actionHeight)
+      .contentShape(.capsule)
+      .glassEffect(.regular.tint(.accentColor).interactive(), in: .capsule)
     }
-    .buttonStyle(.glassProminent)
+    .buttonStyle(.plain)
     .accessibilityLabel(
       "Add ^[\(items.count) item](inflect: true), \(LogItemMath.totals(items).calories, format: .number.precision(.fractionLength(0))) kcal"
     )

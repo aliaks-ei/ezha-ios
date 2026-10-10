@@ -100,11 +100,13 @@ final class DayStore {
     return .saved
   }
 
-  /// Hides the row and queues the delete in 5 s. Returns the undo action.
+  /// Hides the row and queues the delete for after the undo toast. Returns the undo action.
   func delete(_ entry: DayEntry) async -> (@MainActor () async -> Void)? {
     let date = entry.entry.date
     do {
-      let outboxId = try await sync.enqueueDelete(entryId: entry.id, date: date)
+      let window = ToastMessage.undoWindow.components
+      let outboxId = try await sync.enqueueDelete(
+        entryId: entry.id, date: date, delay: Double(window.seconds) + 0.5)
       updateSnapshot(date)
       if let outboxId {
         return { [weak self] in
