@@ -441,7 +441,7 @@ async function loadCatalog(
   const timer = setTimeout(cancel, 1500);
   try {
     const select =
-      "id,name,is_meal,amount_unit,serving_size,serving_unit,calories_per_100g,protein_per_100g,carbs_per_100g,fat_per_100g,calories_per_serving,protein_per_serving,carbs_per_serving,fat_per_serving";
+      "id,name,is_meal,amount_unit,serving_size,serving_unit,calories_per_100g,protein_per_100g,carbs_per_100g,fat_per_100g,fiber_per_100g,calories_per_serving,protein_per_serving,carbs_per_serving,fat_per_serving,fiber_per_serving";
     const response = await fetcher(
       `${supabaseUrl}/rest/v1/saved_foods?is_meal=eq.false&select=${select}&order=is_favorite.desc,last_used_at.desc.nullslast,id.asc&limit=60`,
       {

@@ -77,20 +77,39 @@ struct MacroBar: View {
   }
 }
 
-/// "P 40g · C 70g · F 20g"
+/// "P 40g · C 70g · F 20g", and with `showsFiber` "· Fiber 6g" when fiber is known.
+/// `isFiberPartial`: some foods have no fiber data, so the value is a lower bound ("≥ 6g").
 struct MacroLine: View {
   var macros: MacroTotals
+  var showsFiber = false
+  var isFiberPartial = false
+
+  private var fiber: String? {
+    guard showsFiber, let fiber = macros.fiber else { return nil }
+    return fiber.formatted(.number.precision(.fractionLength(0)))
+  }
 
   var body: some View {
-    Text(
+    let base = Text(
       "P \(macros.protein, format: .number.precision(.fractionLength(0)))g · C \(macros.carbs, format: .number.precision(.fractionLength(0)))g · F \(macros.fat, format: .number.precision(.fractionLength(0)))g"
     )
+    let spoken = Text(
+      "Protein \(macros.protein, format: .number.precision(.fractionLength(0))) grams, carbs \(macros.carbs, format: .number.precision(.fractionLength(0))) grams, fat \(macros.fat, format: .number.precision(.fractionLength(0))) grams"
+    )
+    Group {
+      if let fiber {
+        Text("\(base) · Fiber \(isFiberPartial ? "≥ " : "")\(fiber)g")
+      } else {
+        base
+      }
+    }
     .fontDesign(.rounded)
     .monospacedDigit()
     .accessibilityLabel(
-      Text(
-        "Protein \(macros.protein, format: .number.precision(.fractionLength(0))) grams, carbs \(macros.carbs, format: .number.precision(.fractionLength(0))) grams, fat \(macros.fat, format: .number.precision(.fractionLength(0))) grams"
-      ))
+      fiber.map {
+        isFiberPartial
+          ? Text("\(spoken), fiber at least \($0) grams") : Text("\(spoken), fiber \($0) grams")
+      } ?? spoken)
   }
 }
 

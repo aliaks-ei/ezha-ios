@@ -15,7 +15,11 @@ struct EntryDetailSheet: View {
         Section {
           VStack(alignment: .leading, spacing: 6) {
             KcalText(value: entry.entry.calories).font(.title2.bold())
-            MacroLine(macros: entry.entry.macros).font(.subheadline)
+            MacroLine(
+              macros: entryMacros, showsFiber: true,
+              isFiberPartial: !FiberSummary.isEntryComplete(entry)
+            )
+            .font(.subheadline)
             Text(subtitle)
               .font(.footnote)
               .foregroundStyle(.secondary)
@@ -37,7 +41,7 @@ struct EntryDetailSheet: View {
             HStack(alignment: .top) {
               VStack(alignment: .leading, spacing: 2) {
                 Text(item.name)
-                MacroLine(macros: item.macros)
+                MacroLine(macros: item.macros, showsFiber: true)
                   .font(.caption)
                   .foregroundStyle(.secondary)
               }
@@ -89,6 +93,13 @@ struct EntryDetailSheet: View {
       }
     }
     .presentationDetents([.medium, .large])
+  }
+
+  /// The entry macros with its known fiber (stored, or summed from the items).
+  private var entryMacros: MacroTotals {
+    var macros = entry.entry.macros
+    macros.fiber = FiberSummary.entryFiber(entry)
+    return macros
   }
 
   /// "8:30 AM · AI: photo · AI 80%"

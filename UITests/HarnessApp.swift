@@ -26,7 +26,9 @@ struct HarnessApp: App {
   var body: some Scene {
     WindowGroup {
       Group {
-        if ["today", "todayOver", "todayEmpty", "todayMany"].contains(scenario) {
+        if ["today", "todayOver", "todayEmpty", "todayMany", "todayFiber", "todayFiberPartial"]
+          .contains(scenario)
+        {
           TodayView(openLogger: { _ in })
         } else if scenario == "shell" {
           MainShell()
@@ -56,6 +58,11 @@ struct HarnessApp: App {
         } else if scenario == "entryDetail" {
           Color.clear.sheet(isPresented: .constant(true)) {
             EntryDetailSheet(entry: PreviewData.entries[0])
+              .environment(\.dynamicTypeSize, size)
+          }
+        } else if scenario == "entryDetailFiber" {
+          Color.clear.sheet(isPresented: .constant(true)) {
+            EntryDetailSheet(entry: LoggerFixtures.fiberBowl())
               .environment(\.dynamicTypeSize, size)
           }
         } else if scenario == "logAgain" {

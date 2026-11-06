@@ -33,7 +33,8 @@ struct FoodFormModel: Equatable {
     LibraryDrafts.manualDraft(
       .init(
         name: name, unitType: unitType, servingGrams: parseNumberInput(servingGrams),
-        servingUnit: servingUnit, amountUnit: amountUnit, per100g: macros.optionalValues))
+        servingUnit: servingUnit, amountUnit: amountUnit, per100g: macros.optionalValues,
+        fiber: macros.fiberInput))
   }
 
   var basis: Basis {
@@ -87,16 +88,19 @@ struct FoodFormFields: View {
     Section {
       MacroFields(
         model: $model.macros,
-        basis: model.amountUnit == .ml ? "per 100 millilitres" : "per 100 grams")
+        basis: model.amountUnit == .ml ? "per 100 millilitres" : "per 100 grams", showsFiber: true)
     } header: {
       Text(model.amountUnit == .ml ? "Nutrition per 100 ml" : "Nutrition per 100 g")
     } footer: {
-      if model.unitType == .perServing, case .success(let draft) = model.draft {
-        let serving = draft.perServing
-        Text(
-          "Per serving: \(serving.calories, format: .number.precision(.fractionLength(0))) kcal · P \(serving.protein, format: .number.precision(.fractionLength(0...1)))g · C \(serving.carbs, format: .number.precision(.fractionLength(0...1)))g · F \(serving.fat, format: .number.precision(.fractionLength(0...1)))g"
-        )
-        .monospacedDigit()
+      VStack(alignment: .leading, spacing: 4) {
+        Text("Leave Fiber empty if you don't know it.")
+        if model.unitType == .perServing, case .success(let draft) = model.draft {
+          let serving = draft.perServing
+          Text(
+            "Per serving: \(serving.calories, format: .number.precision(.fractionLength(0))) kcal · P \(serving.protein, format: .number.precision(.fractionLength(0...1)))g · C \(serving.carbs, format: .number.precision(.fractionLength(0...1)))g · F \(serving.fat, format: .number.precision(.fractionLength(0...1)))g"
+          )
+          .monospacedDigit()
+        }
       }
     }
   }
@@ -377,7 +381,7 @@ struct AddFoodSheet: View {
     if photo.estimate != nil {
       Section {
         TextField("Name", text: $photo.name)
-        MacroFields(model: $photo.display)
+        MacroFields(model: $photo.display, showsFiber: true)
       } header: {
         Text(photo.isLabel ? "Nutrition for the amount eaten" : "Nutrition")
       }
@@ -398,7 +402,7 @@ struct AddFoodSheet: View {
           display: photo.display.values == nil ? [] : photo.display.optionalValues,
           isLabelPhoto: photo.isLabel,
           labelGrams: parseNumberInput(photo.labelGramsText),
-          unit: photo.isLabel ? photo.labelUnit : .g)
+          unit: photo.isLabel ? photo.labelUnit : .g, fiber: photo.display.fiberInput)
       }
     switch result {
     case .failure(let error):
@@ -466,7 +470,10 @@ final class PhotoFoodModel {
         isLabel
         ? LogItemMath.scalePer100g(result.totals, grams: parseNumberInput(labelGramsText))
         : result.totals
-      display = MacroFieldsModel(values: shown.rounded)
+      var rounded = shown.rounded
+      // Fiber values are small: keep one decimal.
+      rounded.fiber = shown.fiber.map { ($0 * 10).rounded() / 10 }
+      display = MacroFieldsModel(values: rounded)
     } catch {
       errorMessage = LoggerModel.message(for: error)
     }

@@ -6,6 +6,8 @@ export type Macros = {
   protein: number;
   carbs: number;
   fat: number;
+  // Dietary fiber in grams. Null or missing is unknown, never 0.
+  fiber?: number | null;
 };
 export type CatalogFood = {
   id: string;
@@ -51,6 +53,8 @@ export type Label = {
   protein: number;
   carbs: number;
   fat: number;
+  // Printed dietary fibre for the same column, or null when the label does not print it.
+  fiber: number | null;
   // Printed mass corresponding to the nutrition column. Never infer density.
   reference_mass_grams: number | null;
   notes: string;
@@ -61,6 +65,7 @@ export type LabelReading = {
   label: Label | null;
 };
 export type EstimateItem = Macros & {
+  fiber: number | null;
   name: string;
   // Amount in `unit`. Older clients read it as grams.
   grams: number;
@@ -95,6 +100,13 @@ const macroSchema = object({
   carbs: { type: "number" },
   fat: { type: "number" },
 });
+const fallbackSchema = object({
+  calories: { type: "number" },
+  protein: { type: "number" },
+  carbs: { type: "number" },
+  fat: { type: "number" },
+  fiber: nullable("number"),
+});
 
 export const mealSchema = object({
   status: enumField(["ok", "not_food", "unclear"]),
@@ -113,7 +125,7 @@ export const mealSchema = object({
       ]),
       identification: enumField(["clear", "uncertain"]),
       catalog_id: nullable("string"),
-      fallback_per100g: { anyOf: [macroSchema, { type: "null" }] },
+      fallback_per100g: { anyOf: [fallbackSchema, { type: "null" }] },
       notes: { type: "string" },
     }),
   },
@@ -141,6 +153,7 @@ export const labelSchema = object({
         protein: { type: "number" },
         carbs: { type: "number" },
         fat: { type: "number" },
+        fiber: nullable("number"),
         reference_mass_grams: nullable("number"),
         notes: { type: "string" },
       }),
@@ -178,6 +191,7 @@ export function buildModelBody(options: {
       "When as-sold and as-prepared columns differ, choose the one matching user context; default to as sold and mention it in notes. Never combine columns.",
       "Return values exactly for that column. Prefer kcal when both kcal and kJ are printed.",
       "Do not change printed energy to fit 4P+4C+9F: fibre, polyols and rounding can differ.",
+      "fiber is the printed dietary fibre for the same column, or null when the label does not print it. Never estimate fiber.",
       "reference_mass_grams is 100 for per_100g, null for per_100ml; for per_serving only the printed gram mass of the serving, or null.",
       "Never convert millilitres to grams or assume a density. For per_serving do not guess serving mass.",
       "Return unreadable with label null if any required nutrient or column basis is unreadable. Never fill missing values with zero.",
@@ -198,6 +212,7 @@ export function buildModelBody(options: {
       "Prepared references may already include cooking fat. Do not add it again unless the user explicitly describes additional fat.",
       "Catalog references are per 100 g unless marked per 100 ml. Choose a catalog_id only when its unit matches the item unit.",
       "For a catalog match set fallback_per100g to null. If no suitable match exists, use catalog_id null and estimate nutrition per 100 of the item unit (per 100 g or per 100 ml), explicitly explaining assumptions in notes.",
+      "In fallback_per100g, estimate dietary fiber per 100 of the item unit when the food is known well enough, else null. Use 0 only for foods without fiber, such as meat, fish, eggs, oils and plain dairy.",
       "Keep components useful and distinct. Do not invent unseen oil, dressing or ingredients; ask if they could materially change the estimate.",
       "Give at most one short review question about the biggest unresolved portion, ingredient or identity; set review null when input is sufficiently clear.",
       "A portion question references an item_index; identity/ingredient answers can update the description. Avoid numerical confidence scores.",
@@ -266,22 +281,40 @@ function validateDensity(macros: Macros) {
   }
 }
 const round = (value: number) => Math.round(value * 100) / 100;
-export const scale = (macros: Macros, factor: number): Macros => ({
-  calories: round(macros.calories * factor),
-  protein: round(macros.protein * factor),
-  carbs: round(macros.carbs * factor),
-  fat: round(macros.fat * factor),
-});
-export function sum(items: Macros[]): Macros {
-  return scale(
-    items.reduce((a, b) => ({
-      calories: a.calories + b.calories,
-      protein: a.protein + b.protein,
-      carbs: a.carbs + b.carbs,
-      fat: a.fat + b.fat,
-    }), { calories: 0, protein: 0, carbs: 0, fat: 0 }),
-    1,
-  );
+/// A usable fiber value in grams, or null (unknown). Invalid values become unknown, not 0.
+export function fiberOf(macros: Macros, per100 = false): number | null {
+  const fiber = macros.fiber;
+  return typeof fiber === "number" && Number.isFinite(fiber) && fiber >= 0 &&
+      (!per100 || fiber <= 100)
+    ? fiber
+    : null;
+}
+export const scale = (
+  macros: Macros,
+  factor: number,
+): Macros & { fiber: number | null } => {
+  const fiber = fiberOf(macros);
+  return {
+    calories: round(macros.calories * factor),
+    protein: round(macros.protein * factor),
+    carbs: round(macros.carbs * factor),
+    fat: round(macros.fat * factor),
+    fiber: fiber === null ? null : round(fiber * factor),
+  };
+};
+/// Fiber is the sum only when every item has it; one unknown item makes the total unknown.
+export function sum(items: Macros[]): Macros & { fiber: number | null } {
+  const fibers = items.map((item) => fiberOf(item));
+  const total = items.reduce((a, b) => ({
+    calories: a.calories + b.calories,
+    protein: a.protein + b.protein,
+    carbs: a.carbs + b.carbs,
+    fat: a.fat + b.fat,
+  }), { calories: 0, protein: 0, carbs: 0, fat: 0 });
+  const fiber = fibers.length && fibers.every((f) => f !== null)
+    ? fibers.reduce((a: number, b) => a + b!, 0)
+    : null;
+  return scale({ ...total, fiber }, 1);
 }
 
 export function normalizeLabel(reading: LabelReading): Result {
@@ -321,6 +354,7 @@ export function normalizeLabel(reading: LabelReading): Result {
       : label.calories,
   }, 100 / mass);
   validateDensity(per100g);
+  per100g.fiber = fiberOf(per100g, true);
   const item: EstimateItem = {
     name: reading.food_name?.trim() || "Nutrition label",
     grams: 100,
@@ -401,6 +435,7 @@ export function normalizeMeal(
     }
     const per100g = { ...(ref?.per100g ?? item.fallback_per100g!) };
     validateDensity(per100g);
+    per100g.fiber = fiberOf(per100g, true);
     const flags: string[] = [];
     if (!ref) {
       const derived = 4 * per100g.protein + 4 * per100g.carbs + 9 * per100g.fat;
@@ -500,19 +535,30 @@ export function libraryFood(row: Record<string, unknown>): CatalogFood | null {
     );
   const per100 = read("per_100g");
   const perServing = read("per_serving");
+  // Optional and outside validMacros: a food without fiber is still a reference.
+  const fiber100 = row.fiber_per_100g;
+  const fiberServing = row.fiber_per_serving;
   const mass = row.serving_size;
   // amount_unit "ml": per-100 values are per 100 ml and serving_size is in ml.
   const unit: Unit = row.amount_unit === "ml" ? "ml" : "g";
   let macros: Macros;
-  if (validMacros(per100) && Object.values(per100).some((v) => v > 0)) {
-    macros = per100;
+  if (validMacros(per100) && Object.values(per100).some((v) => (v ?? 0) > 0)) {
+    macros = {
+      ...per100,
+      fiber: fiberOf({ ...per100, fiber: fiber100 as number }, true),
+    };
   } else if (
-    validMacros(perServing) && Object.values(perServing).some((v) => v > 0) &&
+    validMacros(perServing) &&
+    Object.values(perServing).some((v) => (v ?? 0) > 0) &&
     // EZHA stores serving_size in the food unit; serving_unit is a display name such as cup or slice.
     typeof mass === "number" && Number.isFinite(mass) && mass > 0 &&
     mass <= 5000
-  ) macros = scale(perServing, 100 / mass);
-  else return null;
+  ) {
+    macros = scale(
+      { ...perServing, fiber: fiberServing as number | null },
+      100 / mass,
+    );
+  } else return null;
   try {
     validateDensity(macros);
   } catch {
