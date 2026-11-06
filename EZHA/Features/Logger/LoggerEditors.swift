@@ -173,6 +173,8 @@ struct LoggerReviewItem: View {
         Text("\(item.loggerDisplayName) \(chevron)")
           .font(.headline)
           .multilineTextAlignment(.leading)
+          // The chevron has no spoken text; without this the label ends in a stray space.
+          .accessibilityLabel(item.loggerDisplayName)
         // One line when it fits, else kcal above the macros, never a break inside the macros.
         ViewThatFits(in: .horizontal) {
           Text(verbatim: "\(kcal) kcal · P \(protein)g · C \(carbs)g · F \(fat)g")
