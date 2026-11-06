@@ -15,34 +15,6 @@ enum EntryActions {
     }
   }
 
-  /// Copies the items to the selected date with new ids.
-  static func logAgain(_ entry: DayEntry, appModel: AppModel) {
-    let newId = UUID()
-    var copy = entry.entry
-    copy.id = newId
-    copy.date = appModel.selectedDate
-    copy.createdAt = .now
-    let items = entry.items.map { item in
-      var item = item
-      item.id = UUID()
-      item.entryId = newId
-      item.createdAt = nil
-      return item
-    }
-    Task {
-      do {
-        let result = try await appModel.dayStore.log(
-          LogPayload(entry: copy, items: items, usedFoodIds: []))
-        appModel.showToast(
-          result == .saved
-            ? String(localized: "Meal logged.")
-            : String(localized: "Saved on this device. Totals update after syncing."))
-      } catch {
-        appModel.showToast(error.localizedDescription)
-      }
-    }
-  }
-
   /// Saves the entry's items as a library meal.
   static func saveAsMeal(_ entry: DayEntry, appModel: AppModel) {
     let ingredients = entry.items.map {

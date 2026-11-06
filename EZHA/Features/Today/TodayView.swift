@@ -119,6 +119,7 @@ private struct DayContent: View {
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @State private var isTargetSheetPresented = false
   @State private var detail: DayEntry?
+  @State private var logAgain: DayEntry?
 
   private var store: DayStore { appModel.dayStore }
 
@@ -176,6 +177,9 @@ private struct DayContent: View {
     .sheet(item: $detail) { entry in
       EntryDetailSheet(entry: entry)
     }
+    .sheet(item: $logAgain) { entry in
+      LogAgainSheet(entry: entry)
+    }
   }
 
   @ViewBuilder
@@ -207,7 +211,7 @@ private struct DayContent: View {
           }
           .contextMenu {
             Button("Log again", systemImage: "arrow.counterclockwise") {
-              EntryActions.logAgain(entry, appModel: appModel)
+              logAgain = entry
             }
             Button("Save as meal", systemImage: "books.vertical") {
               EntryActions.saveAsMeal(entry, appModel: appModel)

@@ -7,6 +7,7 @@ struct EntryDetailSheet: View {
   @Environment(AppModel.self) private var appModel
   @Environment(\.dismiss) private var dismiss
   @State private var imageURL: URL?
+  @State private var isLogAgainPresented = false
 
   var body: some View {
     NavigationStack {
@@ -58,9 +59,9 @@ struct EntryDetailSheet: View {
         }
         Section {
           Button("Log again", systemImage: "arrow.counterclockwise") {
-            EntryActions.logAgain(entry, appModel: appModel)
-            dismiss()
+            isLogAgainPresented = true
           }
+          .accessibilityIdentifier("entryLogAgain")
           Button("Save as meal", systemImage: "books.vertical") {
             EntryActions.saveAsMeal(entry, appModel: appModel)
             dismiss()
@@ -81,6 +82,10 @@ struct EntryDetailSheet: View {
         ToolbarItem(placement: .cancellationAction) {
           Button("Close", systemImage: "xmark") { dismiss() }
         }
+      }
+      .sheet(isPresented: $isLogAgainPresented) {
+        // After the copy is saved, the detail sheet closes too.
+        LogAgainSheet(entry: entry) { dismiss() }
       }
       .task {
         guard let path = entry.entry.imagePath else { return }
