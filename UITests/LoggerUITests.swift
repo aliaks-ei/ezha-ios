@@ -167,22 +167,61 @@ final class LoggerUITests: HarnessTestCase {
   func testTodayCalendarChangesDayAndSwipeDoesNot() {
     launch("today")
     let day: TimeInterval = 86_400
-    XCTAssertTrue(app.navigationBars["Today"].waitForExistence(timeout: 10))
+    let dayTitle = app.staticTexts["dayTitle"]
+    let previous = app.buttons["previousDay"]
+    let next = app.buttons["nextDay"]
+    XCTAssertTrue(dayTitle.waitForExistence(timeout: 10))
+    XCTAssertEqual(dayTitle.label, "Today")
     XCTAssertTrue(app.staticTexts["Protein"].firstMatch.waitForExistence(timeout: 10))
+    XCTAssertFalse(next.isEnabled, "no future days")
+    XCTAssertEqual(previous.label, "Previous day")
+    XCTAssertEqual(next.label, "Next day")
+    capture("today")
     app.swipeRight()
-    XCTAssertTrue(app.navigationBars["Today"].exists, "swipe keeps today")
+    XCTAssertEqual(dayTitle.label, "Today", "swipe keeps today")
+
+    previous.tap()
+    XCTAssertTrue(waitForLabel(dayTitle, title(.now - day)), "previous day")
+    XCTAssertTrue(next.isEnabled)
+    XCTAssertTrue(app.buttons["Today"].exists)
+    previous.tap()
+    XCTAssertTrue(waitForLabel(dayTitle, title(.now - 2 * day)), "two days back")
+    next.tap()
+    XCTAssertTrue(waitForLabel(dayTitle, title(.now - day)), "next day")
+    next.tap()
+    XCTAssertTrue(waitForLabel(dayTitle, "Today"), "next reaches today")
+    XCTAssertFalse(next.isEnabled)
+
     app.buttons["Choose day"].tap()
     XCTAssertTrue(app.datePickers.firstMatch.waitForExistence(timeout: 3))
     capture("today-calendar")
     let yesterday = (Date.now - day).formatted(.dateTime.weekday(.wide).month(.wide).day())
     app.datePickers.firstMatch.buttons[yesterday].tap()
-    XCTAssertTrue(app.navigationBars[title(.now - day)].waitForExistence(timeout: 3), "picked day")
+    XCTAssertTrue(waitForLabel(dayTitle, title(.now - day)), "picked day")
     XCTAssertTrue(app.staticTexts["Protein"].firstMatch.waitForExistence(timeout: 10))
     capture("today-yesterday")
     app.swipeLeft()
-    XCTAssertTrue(app.navigationBars[title(.now - day)].exists, "swipe keeps the picked day")
+    XCTAssertEqual(dayTitle.label, title(.now - day), "swipe keeps the picked day")
     app.buttons["Today"].firstMatch.tap()
-    XCTAssertTrue(app.navigationBars["Today"].waitForExistence(timeout: 3), "back to today")
+    XCTAssertTrue(waitForLabel(dayTitle, "Today"), "back to today")
+  }
+
+  func testTodayDayTitleAppearances() {
+    for (suffix, dark, large) in [("dark", true, false), ("large", false, true)] {
+      launch("today", dark: dark, large: large)
+      XCTAssertTrue(app.staticTexts["dayTitle"].waitForExistence(timeout: 10))
+      XCTAssertTrue(app.staticTexts["Protein"].firstMatch.waitForExistence(timeout: 10))
+      capture("today-\(suffix)")
+      app.buttons["previousDay"].tap()
+      XCTAssertTrue(waitForLabel(app.staticTexts["dayTitle"], title(.now - 86_400)))
+      capture("today-yesterday-\(suffix)")
+    }
+  }
+
+  func waitForLabel(_ element: XCUIElement, _ label: String) -> Bool {
+    let predicate = NSPredicate(format: "label == %@", label)
+    let expectation = XCTNSPredicateExpectation(predicate: predicate, object: element)
+    return XCTWaiter().wait(for: [expectation], timeout: 3) == .completed
   }
 
   func testLibraryItemCanBeFavoritedAndEdited() {
