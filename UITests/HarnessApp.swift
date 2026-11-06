@@ -26,7 +26,7 @@ struct HarnessApp: App {
   var body: some Scene {
     WindowGroup {
       Group {
-        if scenario == "today" || scenario == "todayOver" {
+        if ["today", "todayOver", "todayEmpty", "todayMany"].contains(scenario) {
           TodayView(openLogger: { _ in })
         } else if scenario == "shell" {
           MainShell()
