@@ -1,29 +1,37 @@
 import Foundation
 
-/// Four macro values. Used for goals, totals, remaining, and item macros.
+/// Four macro values and optional fiber. Used for goals, totals, remaining, and item macros.
 public struct MacroTotals: Codable, Sendable, Hashable {
   public var calories: Double
   public var protein: Double
   public var carbs: Double
   public var fat: Double
+  /// Dietary fiber in grams. Nil is unknown, never 0. Display only: there is no fiber goal.
+  public var fiber: Double?
 
-  public init(calories: Double, protein: Double, carbs: Double, fat: Double) {
+  public init(
+    calories: Double, protein: Double, carbs: Double, fat: Double, fiber: Double? = nil
+  ) {
     self.calories = calories
     self.protein = protein
     self.carbs = carbs
     self.fat = fat
+    self.fiber = fiber
   }
 
   public static let zero = MacroTotals(calories: 0, protein: 0, carbs: 0, fat: 0)
   /// Goals used when a user has no target (PWA `EXAMPLE_TARGETS`).
   public static let example = MacroTotals(calories: 2100, protein: 140, carbs: 220, fat: 70)
 
+  /// Fiber is the sum of the known values: unknown + unknown stays unknown, and unknown + 3 is 3.
+  /// The sum is then a lower bound; `FiberSummary` tells a partial sum from a complete one.
   public static func + (lhs: MacroTotals, rhs: MacroTotals) -> MacroTotals {
     MacroTotals(
       calories: lhs.calories + rhs.calories,
       protein: lhs.protein + rhs.protein,
       carbs: lhs.carbs + rhs.carbs,
-      fat: lhs.fat + rhs.fat
+      fat: lhs.fat + rhs.fat,
+      fiber: lhs.fiber == nil && rhs.fiber == nil ? nil : (lhs.fiber ?? 0) + (rhs.fiber ?? 0)
     )
   }
 
@@ -32,7 +40,8 @@ public struct MacroTotals: Codable, Sendable, Hashable {
       calories: calories * factor,
       protein: protein * factor,
       carbs: carbs * factor,
-      fat: fat * factor
+      fat: fat * factor,
+      fiber: fiber.map { $0 * factor }
     )
   }
 
@@ -41,7 +50,8 @@ public struct MacroTotals: Codable, Sendable, Hashable {
       calories: calories.rounded(),
       protein: protein.rounded(),
       carbs: carbs.rounded(),
-      fat: fat.rounded()
+      fat: fat.rounded(),
+      fiber: fiber?.rounded()
     )
   }
 
@@ -118,6 +128,8 @@ public struct FoodEntry: Codable, Sendable, Hashable, Identifiable {
   public var protein: Double
   public var carbs: Double
   public var fat: Double
+  /// Sum of the known item fiber values, or nil when no item has fiber.
+  public var fiber: Double?
   public var aiConfidence: Double?
   public var aiSource: AISource
   public var aiNotes: String
@@ -138,6 +150,7 @@ public struct FoodEntry: Codable, Sendable, Hashable, Identifiable {
     self.protein = macros.protein
     self.carbs = macros.carbs
     self.fat = macros.fat
+    self.fiber = macros.fiber
     self.aiConfidence = aiConfidence
     self.aiSource = aiSource
     self.aiNotes = aiNotes
@@ -145,7 +158,7 @@ public struct FoodEntry: Codable, Sendable, Hashable, Identifiable {
   }
 
   public var macros: MacroTotals {
-    MacroTotals(calories: calories, protein: protein, carbs: carbs, fat: fat)
+    MacroTotals(calories: calories, protein: protein, carbs: carbs, fat: fat, fiber: fiber)
   }
 
   enum CodingKeys: String, CodingKey {
@@ -155,7 +168,7 @@ public struct FoodEntry: Codable, Sendable, Hashable, Identifiable {
     case inputType = "input_type"
     case inputText = "input_text"
     case imagePath = "image_path"
-    case calories, protein, carbs, fat
+    case calories, protein, carbs, fat, fiber
     case aiConfidence = "ai_confidence"
     case aiSource = "ai_source"
     case aiNotes = "ai_notes"
@@ -198,6 +211,8 @@ public struct FoodEntryItem: Codable, Sendable, Hashable, Identifiable {
   public var protein: Double
   public var carbs: Double
   public var fat: Double
+  /// Nil is unknown, never 0.
+  public var fiber: Double?
   public var aiConfidence: Double?
   public var aiNotes: String
   public var createdAt: Date?
@@ -217,20 +232,21 @@ public struct FoodEntryItem: Codable, Sendable, Hashable, Identifiable {
     self.protein = macros.protein
     self.carbs = macros.carbs
     self.fat = macros.fat
+    self.fiber = macros.fiber
     self.aiConfidence = aiConfidence
     self.aiNotes = aiNotes
     self.createdAt = createdAt
   }
 
   public var macros: MacroTotals {
-    MacroTotals(calories: calories, protein: protein, carbs: carbs, fat: fat)
+    MacroTotals(calories: calories, protein: protein, carbs: carbs, fat: fat, fiber: fiber)
   }
 
   enum CodingKeys: String, CodingKey {
     case id
     case entryId = "entry_id"
     case userId = "user_id"
-    case name, grams, unit, calories, protein, carbs, fat
+    case name, grams, unit, calories, protein, carbs, fat, fiber
     case aiConfidence = "ai_confidence"
     case aiNotes = "ai_notes"
     case createdAt = "created_at"
@@ -249,6 +265,8 @@ public struct FoodEntryItem: Codable, Sendable, Hashable, Identifiable {
     protein = try c.decode(Double.self, forKey: .protein)
     carbs = try c.decode(Double.self, forKey: .carbs)
     fat = try c.decode(Double.self, forKey: .fat)
+    // Rows and cached payloads from before PET-115 have no fiber.
+    fiber = try c.decodeIfPresent(Double.self, forKey: .fiber)
     aiConfidence = try c.decodeIfPresent(Double.self, forKey: .aiConfidence)
     aiNotes = try c.decode(String.self, forKey: .aiNotes)
     createdAt = try c.decodeIfPresent(Date.self, forKey: .createdAt)
@@ -366,10 +384,13 @@ public struct SavedFood: Codable, Sendable, Hashable, Identifiable {
   public var proteinPer100g: Double
   public var carbsPer100g: Double
   public var fatPer100g: Double
+  /// Optional. Nil is unknown, never 0.
+  public var fiberPer100g: Double?
   public var caloriesPerServing: Double
   public var proteinPerServing: Double
   public var carbsPerServing: Double
   public var fatPerServing: Double
+  public var fiberPerServing: Double?
   public var isMeal: Bool
   public var isFavorite: Bool
   public var lastUsedAt: Date?
@@ -399,10 +420,12 @@ public struct SavedFood: Codable, Sendable, Hashable, Identifiable {
     self.proteinPer100g = per100g.protein
     self.carbsPer100g = per100g.carbs
     self.fatPer100g = per100g.fat
+    self.fiberPer100g = per100g.fiber
     self.caloriesPerServing = perServing.calories
     self.proteinPerServing = perServing.protein
     self.carbsPerServing = perServing.carbs
     self.fatPerServing = perServing.fat
+    self.fiberPerServing = perServing.fiber
     self.isMeal = isMeal
     self.isFavorite = isFavorite
     self.lastUsedAt = lastUsedAt
@@ -435,13 +458,14 @@ public struct SavedFood: Codable, Sendable, Hashable, Identifiable {
 
   public var per100g: MacroTotals {
     MacroTotals(
-      calories: caloriesPer100g, protein: proteinPer100g, carbs: carbsPer100g, fat: fatPer100g)
+      calories: caloriesPer100g, protein: proteinPer100g, carbs: carbsPer100g, fat: fatPer100g,
+      fiber: fiberPer100g)
   }
 
   public var perServing: MacroTotals {
     MacroTotals(
       calories: caloriesPerServing, protein: proteinPerServing, carbs: carbsPerServing,
-      fat: fatPerServing)
+      fat: fatPerServing, fiber: fiberPerServing)
   }
 
   enum CodingKeys: String, CodingKey {
@@ -456,10 +480,12 @@ public struct SavedFood: Codable, Sendable, Hashable, Identifiable {
     case proteinPer100g = "protein_per_100g"
     case carbsPer100g = "carbs_per_100g"
     case fatPer100g = "fat_per_100g"
+    case fiberPer100g = "fiber_per_100g"
     case caloriesPerServing = "calories_per_serving"
     case proteinPerServing = "protein_per_serving"
     case carbsPerServing = "carbs_per_serving"
     case fatPerServing = "fat_per_serving"
+    case fiberPerServing = "fiber_per_serving"
     case isMeal = "is_meal"
     case isFavorite = "is_favorite"
     case lastUsedAt = "last_used_at"
@@ -483,10 +509,12 @@ public struct SavedFood: Codable, Sendable, Hashable, Identifiable {
     proteinPer100g = try c.decodeIfPresent(Double.self, forKey: .proteinPer100g) ?? 0
     carbsPer100g = try c.decodeIfPresent(Double.self, forKey: .carbsPer100g) ?? 0
     fatPer100g = try c.decodeIfPresent(Double.self, forKey: .fatPer100g) ?? 0
+    fiberPer100g = try c.decodeIfPresent(Double.self, forKey: .fiberPer100g)
     caloriesPerServing = try c.decodeIfPresent(Double.self, forKey: .caloriesPerServing) ?? 0
     proteinPerServing = try c.decodeIfPresent(Double.self, forKey: .proteinPerServing) ?? 0
     carbsPerServing = try c.decodeIfPresent(Double.self, forKey: .carbsPerServing) ?? 0
     fatPerServing = try c.decodeIfPresent(Double.self, forKey: .fatPerServing) ?? 0
+    fiberPerServing = try c.decodeIfPresent(Double.self, forKey: .fiberPerServing)
     isMeal = try c.decodeIfPresent(Bool.self, forKey: .isMeal) ?? false
     isFavorite = try c.decodeIfPresent(Bool.self, forKey: .isFavorite) ?? false
     lastUsedAt = try c.decodeIfPresent(Date.self, forKey: .lastUsedAt)
@@ -510,6 +538,8 @@ public struct SavedMealIngredient: Codable, Sendable, Hashable, Identifiable {
   public var protein: Double
   public var carbs: Double
   public var fat: Double
+  /// Nil is unknown, never 0.
+  public var fiber: Double?
   public var linkedFoodId: UUID?
   public var createdAt: Date?
 
@@ -527,19 +557,20 @@ public struct SavedMealIngredient: Codable, Sendable, Hashable, Identifiable {
     self.protein = macros.protein
     self.carbs = macros.carbs
     self.fat = macros.fat
+    self.fiber = macros.fiber
     self.linkedFoodId = linkedFoodId
     self.createdAt = createdAt
   }
 
   public var macros: MacroTotals {
-    MacroTotals(calories: calories, protein: protein, carbs: carbs, fat: fat)
+    MacroTotals(calories: calories, protein: protein, carbs: carbs, fat: fat, fiber: fiber)
   }
 
   enum CodingKeys: String, CodingKey {
     case id
     case mealId = "meal_id"
     case userId = "user_id"
-    case name, grams, unit, calories, protein, carbs, fat
+    case name, grams, unit, calories, protein, carbs, fat, fiber
     case linkedFoodId = "linked_food_id"
     case createdAt = "created_at"
   }
@@ -556,6 +587,7 @@ public struct SavedMealIngredient: Codable, Sendable, Hashable, Identifiable {
     protein = try c.decode(Double.self, forKey: .protein)
     carbs = try c.decode(Double.self, forKey: .carbs)
     fat = try c.decode(Double.self, forKey: .fat)
+    fiber = try c.decodeIfPresent(Double.self, forKey: .fiber)
     linkedFoodId = try c.decodeIfPresent(UUID.self, forKey: .linkedFoodId)
     createdAt = try c.decodeIfPresent(Date.self, forKey: .createdAt)
   }

@@ -34,4 +34,9 @@ public enum NumericInput {
     }
     return nil
   }
+
+  /// For an optional value such as fiber: empty is valid (unknown), anything else as above.
+  public static func optionalNutritionError(_ text: String) -> String? {
+    text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : nutritionError(text)
+  }
 }

@@ -103,7 +103,7 @@ select pg_temp.check(
       and jsonb_array_length(d -> 'entries') = 0
       and d -> 'target' ->> 'name' = 'Cut'
       and jsonb_array_length(d -> 'targets') = 2
-      and (d -> 'totals') = '{"calories": 0, "protein": 0, "carbs": 0, "fat": 0}'::jsonb
+      and (d -> 'totals') = '{"calories": 0, "protein": 0, "carbs": 0, "fat": 0, "fiber": null}'::jsonb
      from public.get_day('2026-10-05') d),
   'get_day with no data uses the latest earlier target');
 select pg_temp.check(
@@ -283,6 +283,56 @@ select public.delete_daily_target((select id from public.daily_targets where nam
 select pg_temp.check(
   (select water_target_ml is null and daily_target_name = 'Basic' from public.daily_summaries where date = '2026-10-08'),
   'delete_daily_target moves later days to the fallback water target');
+
+-- Fiber is optional. Missing fiber stays null (unknown), never 0. Day totals sum the known values.
+select public.log_food_entry(
+  '{"id": "e0000000-0000-0000-0000-000000000009", "date": "2026-10-09", "input_type": "text", "calories": 300, "fiber": 5.4, "ai_source": "text"}',
+  '[{"name": "Oats", "grams": 50, "calories": 190, "fiber": 5.4}, {"name": "Coffee", "grams": 200, "calories": 110}]');
+select public.log_food_entry(
+  '{"id": "e0000000-0000-0000-0000-000000000010", "date": "2026-10-09", "input_type": "text", "calories": 200, "ai_source": "text"}',
+  '[{"name": "Soup", "grams": 300, "calories": 200}]');
+select pg_temp.check(
+  (select array_agg(coalesce(fiber::text, 'null') order by created_at) from public.food_entry_items
+    where entry_id = 'e0000000-0000-0000-0000-000000000009') = array['5.4', 'null']
+  and (select fiber from public.food_entries where id = 'e0000000-0000-0000-0000-000000000010') is null,
+  'log_food_entry stores fiber and keeps missing fiber null');
+select pg_temp.check(
+  (select (d->'totals'->>'fiber')::numeric from public.get_day('2026-10-09') d) = 5
+  and (select i->>'fiber' from public.get_day('2026-10-09') d,
+         jsonb_array_elements(d->'entries') e, jsonb_array_elements(e->'items') i
+        where i->>'name' = 'Oats') = '5.4',
+  'get_day sums known fiber and returns item fiber');
+select pg_temp.check(
+  (select fiber from public.daily_summaries where date = '2026-10-09') = 5,
+  'the daily summary sums known fiber');
+select public.log_food_entry(
+  '{"id": "e0000000-0000-0000-0000-000000000011", "date": "2026-10-10", "input_type": "text", "calories": 200, "ai_source": "text"}',
+  '[{"name": "Soup", "grams": 300, "calories": 200}]');
+select pg_temp.check(
+  (select d->'totals'->'fiber' from public.get_day('2026-10-10') d) = 'null'::jsonb
+  and (select fiber from public.daily_summaries where date = '2026-10-10') is null,
+  'a day without fiber data has null fiber, not 0');
+select public.save_meal(null, 'Oat breakfast', '[{"name": "Oats", "grams": 50, "calories": 190, "fiber": 5}, {"name": "Milk", "grams": 200, "calories": 120}]');
+select pg_temp.check(
+  (select array_agg(coalesce(i.fiber::text, 'null') order by i.created_at) from public.saved_meal_ingredients i
+    join public.saved_foods m on m.id = i.meal_id where m.name = 'Oat breakfast') = array['5', 'null'],
+  'save_meal stores ingredient fiber and keeps missing fiber null');
+insert into public.saved_foods (user_id, name, unit_type, calories_per_100g, fiber_per_100g)
+values ('aaaaaaaa-0000-0000-0000-000000000001', 'Rolled oats', 'per_100g', 379, 10.1);
+select pg_temp.check(
+  (select fiber_per_100g from public.saved_foods where name = 'Rolled oats') = 10.1
+  and (select fiber_per_100g from public.saved_foods where name = 'Rice') is null,
+  'saved foods store optional fiber per 100 g');
+do $$
+begin
+  perform public.log_food_entry(
+    '{"id": "e0000000-0000-0000-0000-000000000012", "date": "2026-10-10", "input_type": "text", "ai_source": "text"}',
+    '[{"name": "Bad", "grams": 10, "fiber": -1}]');
+  raise exception 'FAILED: negative fiber was accepted';
+exception when check_violation then
+  raise notice 'ok: negative fiber is rejected';
+end;
+$$;
 
 -- As user B, A's rows are invisible.
 select pg_temp.as_user('bbbbbbbb-0000-0000-0000-000000000002');

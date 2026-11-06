@@ -7,6 +7,7 @@ struct EntryDetailSheet: View {
   @Environment(AppModel.self) private var appModel
   @Environment(\.dismiss) private var dismiss
   @State private var imageURL: URL?
+  @State private var isLogAgainPresented = false
 
   var body: some View {
     NavigationStack {
@@ -14,7 +15,11 @@ struct EntryDetailSheet: View {
         Section {
           VStack(alignment: .leading, spacing: 6) {
             KcalText(value: entry.entry.calories).font(.title2.bold())
-            MacroLine(macros: entry.entry.macros).font(.subheadline)
+            MacroLine(
+              macros: entryMacros, showsFiber: true,
+              isFiberPartial: !FiberSummary.isEntryComplete(entry)
+            )
+            .font(.subheadline)
             Text(subtitle)
               .font(.footnote)
               .foregroundStyle(.secondary)
@@ -36,7 +41,7 @@ struct EntryDetailSheet: View {
             HStack(alignment: .top) {
               VStack(alignment: .leading, spacing: 2) {
                 Text(item.name)
-                MacroLine(macros: item.macros)
+                MacroLine(macros: item.macros, showsFiber: true)
                   .font(.caption)
                   .foregroundStyle(.secondary)
               }
@@ -54,9 +59,9 @@ struct EntryDetailSheet: View {
         }
         Section {
           Button("Log again", systemImage: "arrow.counterclockwise") {
-            EntryActions.logAgain(entry, appModel: appModel)
-            dismiss()
+            isLogAgainPresented = true
           }
+          .accessibilityIdentifier("entryLogAgain")
           Button("Save as meal", systemImage: "books.vertical") {
             EntryActions.saveAsMeal(entry, appModel: appModel)
             dismiss()
@@ -78,12 +83,23 @@ struct EntryDetailSheet: View {
           Button("Close", systemImage: "xmark") { dismiss() }
         }
       }
+      .sheet(isPresented: $isLogAgainPresented) {
+        // After the copy is saved, the detail sheet closes too.
+        LogAgainSheet(entry: entry) { dismiss() }
+      }
       .task {
         guard let path = entry.entry.imagePath else { return }
         imageURL = try? await appModel.clients.day.imageURL(path)
       }
     }
     .presentationDetents([.medium, .large])
+  }
+
+  /// The entry macros with its known fiber (stored, or summed from the items).
+  private var entryMacros: MacroTotals {
+    var macros = entry.entry.macros
+    macros.fiber = FiberSummary.entryFiber(entry)
+    return macros
   }
 
   /// "8:30 AM · AI: photo · AI 80%"

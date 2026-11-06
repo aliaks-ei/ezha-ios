@@ -27,7 +27,9 @@ struct HarnessApp: App {
   var body: some Scene {
     WindowGroup {
       Group {
-        if ["today", "todayOver", "todayEmpty", "todayMany"].contains(scenario) {
+        if ["today", "todayOver", "todayEmpty", "todayMany", "todayFiber", "todayFiberPartial"]
+          .contains(scenario)
+        {
           TodayView(openLogger: { _ in })
         } else if scenario.hasPrefix("todayWater") {
           TodayView(openLogger: { _ in }).overlay { ToastOverlay(toast: $app.toast) }
@@ -68,6 +70,20 @@ struct HarnessApp: App {
             EntryDetailSheet(entry: PreviewData.entries[0])
               .environment(\.dynamicTypeSize, size)
           }
+        } else if scenario == "entryDetailFiber" {
+          Color.clear.sheet(isPresented: .constant(true)) {
+            EntryDetailSheet(entry: LoggerFixtures.fiberBowl())
+              .environment(\.dynamicTypeSize, size)
+          }
+        } else if scenario == "logAgain" {
+          // The sheet over an empty screen, so the toast shows after it closes.
+          Color.clear
+            .overlay { ToastOverlay(toast: $app.toast) }
+            .sheet(isPresented: $presented) {
+              LogAgainSheet(entry: PreviewData.entries[0])
+                .environment(\.dynamicTypeSize, size)
+            }
+            .onAppear { presented = true }
         } else if scenario == "libraryTab" {
           LibraryView().overlay { ToastOverlay(toast: $app.toast) }
         } else {

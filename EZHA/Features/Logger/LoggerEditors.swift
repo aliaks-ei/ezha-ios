@@ -83,8 +83,8 @@ struct LoggerReviewItem: View {
           .foregroundStyle(Color.danger)
           .accessibilityIdentifier("portionError\(index)")
       }
-      if (model.state.nutritionEdits?[item.id] ?? [:]).values.contains(where: {
-        NumericInput.nutritionError($0) != nil
+      if (model.state.nutritionEdits?[item.id] ?? [:]).contains(where: {
+        LoggerModel.nutritionEditError(field: $0.key, text: $0.value) != nil
       }) && !isExpanded {
         Text("Tap the food name to correct a value.")
           .font(.footnote)
@@ -126,9 +126,10 @@ struct LoggerReviewItem: View {
             nutritionTable(macros).padding(.top, 4)
           }
         }
-        ForEach(["calories", "protein", "carbs", "fat"], id: \.self) { field in
+        ForEach(["calories", "protein", "carbs", "fat", LoggerModel.fiberField], id: \.self) {
+          field in
           if let text = model.state.nutritionEdits?[item.id]?[field],
-            let error = NumericInput.nutritionError(text)
+            let error = LoggerModel.nutritionEditError(field: field, text: text)
           {
             Text("\(field.capitalized): \(error) Last valid calculation is shown.")
               .font(.footnote)
@@ -173,6 +174,8 @@ struct LoggerReviewItem: View {
         Text("\(item.loggerDisplayName) \(chevron)")
           .font(.headline)
           .multilineTextAlignment(.leading)
+          // The chevron has no spoken text; without this the label ends in a stray space.
+          .accessibilityLabel(item.loggerDisplayName)
         // One line when it fits, else kcal above the macros, never a break inside the macros.
         ViewThatFits(in: .horizontal) {
           Text(verbatim: "\(kcal) kcal · P \(protein)g · C \(carbs)g · F \(fat)g")
@@ -217,6 +220,30 @@ struct LoggerReviewItem: View {
       row("Protein", "protein", \.protein, per100g, portion: GramsText(value: macros.protein))
       row("Carbs", "carbs", \.carbs, per100g, portion: GramsText(value: macros.carbs))
       row("Fat", "fat", \.fat, per100g, portion: GramsText(value: macros.fat))
+      GridRow {
+        Text("Fiber").gridColumnAlignment(.leading)
+        fiberField
+        fiberPortion(macros).fontWeight(.semibold)
+      }
+    }
+  }
+
+  /// Optional: empty is unknown, so the portion shows "Not known" instead of 0 g.
+  private var fiberField: some View {
+    Per100gField(
+      title: "Fiber",
+      text: Binding(get: { model.fiberText(item) }, set: { model.setFiberText(item.id, $0) }),
+      itemName: item.loggerDisplayName, unit: item.unit, isOptional: true
+    )
+    .accessibilityIdentifier("per100g-fiber\(index)")
+  }
+
+  @ViewBuilder
+  private func fiberPortion(_ macros: MacroTotals) -> some View {
+    if let fiber = macros.fiber {
+      GramsText(value: fiber)
+    } else {
+      Text("Not known").foregroundStyle(.secondary)
     }
   }
 
@@ -250,6 +277,23 @@ struct LoggerReviewItem: View {
           .fontWeight(.semibold)
           .fontDesign(.rounded)
           .monospacedDigit()
+        }
+      }
+      VStack(alignment: .leading, spacing: 4) {
+        Text("Fiber")
+        HStack {
+          fiberField
+          Text(item.unit.per100Text).foregroundStyle(.secondary)
+        }
+        if let fiber = macros.fiber {
+          Text(
+            "\(Macros.format(fiber, maxFractionDigits: 1)) g in \(item.gramsText) \(item.unit.symbol)"
+          )
+          .fontWeight(.semibold)
+          .fontDesign(.rounded)
+          .monospacedDigit()
+        } else {
+          Text("Not known. Leave empty if you don't know it.").foregroundStyle(.secondary)
         }
       }
     }
@@ -313,12 +357,14 @@ private struct Per100gField: View {
   @Binding var text: String
   var itemName: String
   var unit: AmountUnit
+  /// Empty is valid and shows a dash.
+  var isOptional = false
   @FocusState private var isFocused: Bool
   @ScaledMetric private var width: CGFloat = 56
 
   var body: some View {
     VStack(alignment: .trailing, spacing: 4) {
-      TextField(title, text: $text, prompt: Text(verbatim: "0"))
+      TextField(title, text: $text, prompt: Text(verbatim: isOptional ? "–" : "0"))
         .keyboardType(.decimalPad)
         .multilineTextAlignment(.trailing)
         .fontDesign(.rounded)
@@ -330,7 +376,11 @@ private struct Per100gField: View {
         .contentShape(.rect)
         .onTapGesture { isFocused = true }
         .accessibilityLabel(Text(title) + Text(" per 100 \(unit.spokenName) of \(itemName)"))
-      if let error = NumericInput.nutritionError(text) {
+        .accessibilityHint(
+          isOptional ? Text("Optional. Leave empty if you don't know it.") : Text(""))
+      if let error = isOptional
+        ? NumericInput.optionalNutritionError(text) : NumericInput.nutritionError(text)
+      {
         Image(systemName: "exclamationmark.circle.fill")
           .foregroundStyle(Color.danger)
           .accessibilityLabel(error)

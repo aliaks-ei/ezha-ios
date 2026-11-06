@@ -55,6 +55,8 @@ FOODS = {
     168462: "Spinach, raw",
 }
 NUTRIENTS = {1008: "calories", 1003: "protein", 1005: "carbs", 1004: "fat"}
+# Optional: a food without a fiber row has no "fiber" key (unknown, not 0).
+OPTIONAL = {1079: "fiber"}
 archive = Path(sys.argv[1])
 with zipfile.ZipFile(archive) as z:
     prefix = "FoodData_Central_sr_legacy_food_csv_2018-04/"
@@ -66,10 +68,11 @@ with zipfile.ZipFile(archive) as z:
     values = {fdc_id: {} for fdc_id in FOODS}
     for r in csv.DictReader(io.TextIOWrapper(z.open(prefix + "food_nutrient.csv"))):
         fdc_id, nutrient = int(r["fdc_id"]), int(r["nutrient_id"])
-        if fdc_id in FOODS and nutrient in NUTRIENTS:
-            values[fdc_id][NUTRIENTS[nutrient]] = float(r["amount"])
+        names = NUTRIENTS | OPTIONAL
+        if fdc_id in FOODS and nutrient in names:
+            values[fdc_id][names[nutrient]] = float(r["amount"])
 for fdc_id, nutrients in values.items():
-    assert nutrients.keys() == set(NUTRIENTS.values()), f"Missing nutrients: {fdc_id}"
+    assert set(NUTRIENTS.values()) <= nutrients.keys(), f"Missing nutrients: {fdc_id}"
 rows = [
     {"id": f"usda:{fdc_id}", "name": name, "description": descriptions[fdc_id],
      "source": "usda", "source_id": str(fdc_id), "per100g": values[fdc_id]}
@@ -84,7 +87,7 @@ out = Path(__file__).resolve().parents[1] / "functions" / "ai-estimate"
     "archive_sha256": hashlib.sha256(archive.read_bytes()).hexdigest(),
     "license": "CC0 1.0",
     "basis": "per 100 g edible portion; kcal and grams",
-    "nutrient_ids": NUTRIENTS,
+    "nutrient_ids": NUTRIENTS | OPTIONAL,
     "food_count": len(rows),
 }, indent=2) + "\n")
 print(f"Generated {len(rows)} sourced foods")

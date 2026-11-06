@@ -34,10 +34,12 @@ public struct SavedFoodDraft: Codable, Sendable, Hashable {
     case proteinPer100g = "protein_per_100g"
     case carbsPer100g = "carbs_per_100g"
     case fatPer100g = "fat_per_100g"
+    case fiberPer100g = "fiber_per_100g"
     case caloriesPerServing = "calories_per_serving"
     case proteinPerServing = "protein_per_serving"
     case carbsPerServing = "carbs_per_serving"
     case fatPerServing = "fat_per_serving"
+    case fiberPerServing = "fiber_per_serving"
   }
 
   public init(from decoder: any Decoder) throws {
@@ -51,12 +53,14 @@ public struct SavedFoodDraft: Codable, Sendable, Hashable {
       calories: try c.decode(Double.self, forKey: .caloriesPer100g),
       protein: try c.decode(Double.self, forKey: .proteinPer100g),
       carbs: try c.decode(Double.self, forKey: .carbsPer100g),
-      fat: try c.decode(Double.self, forKey: .fatPer100g))
+      fat: try c.decode(Double.self, forKey: .fatPer100g),
+      fiber: try c.decodeIfPresent(Double.self, forKey: .fiberPer100g))
     perServing = MacroTotals(
       calories: try c.decode(Double.self, forKey: .caloriesPerServing),
       protein: try c.decode(Double.self, forKey: .proteinPerServing),
       carbs: try c.decode(Double.self, forKey: .carbsPerServing),
-      fat: try c.decode(Double.self, forKey: .fatPerServing))
+      fat: try c.decode(Double.self, forKey: .fatPerServing),
+      fiber: try c.decodeIfPresent(Double.self, forKey: .fiberPerServing))
   }
 
   public func encode(to encoder: any Encoder) throws {
@@ -70,10 +74,13 @@ public struct SavedFoodDraft: Codable, Sendable, Hashable {
     try c.encode(per100g.protein, forKey: .proteinPer100g)
     try c.encode(per100g.carbs, forKey: .carbsPer100g)
     try c.encode(per100g.fat, forKey: .fatPer100g)
+    // Null, not omitted: an edit that clears fiber must clear the stored value.
+    try c.encode(per100g.fiber, forKey: .fiberPer100g)
     try c.encode(perServing.calories, forKey: .caloriesPerServing)
     try c.encode(perServing.protein, forKey: .proteinPerServing)
     try c.encode(perServing.carbs, forKey: .carbsPerServing)
     try c.encode(perServing.fat, forKey: .fatPerServing)
+    try c.encode(perServing.fiber, forKey: .fiberPerServing)
   }
 }
 
@@ -85,6 +92,8 @@ public struct LibraryDraftError: Error, Equatable, Sendable, LocalizedError {
   public static let missingPhotoName = LibraryDraftError(
     message: "Please enter a food name to save to Library.")
   public static let invalidMacros = LibraryDraftError(message: "Please enter valid macro values.")
+  public static let invalidFiber = LibraryDraftError(
+    message: "Please enter a valid fiber value or leave it empty.")
   public static let missingServing = LibraryDraftError(message: "Please enter grams per serving.")
   public static let missingServingMl = LibraryDraftError(
     message: "Please enter millilitres per serving.")
@@ -103,10 +112,12 @@ public enum LibraryDrafts {
     public var amountUnit: AmountUnit
     /// Calories, protein, carbs, fat per 100 g (or 100 ml). Nil when a field is not a number.
     public var per100g: [Double?]
+    /// Optional fiber per 100 g (or 100 ml).
+    public var fiber: FiberInput
 
     public init(
       name: String, unitType: FoodUnitType, servingGrams: Double?, servingUnit: String,
-      amountUnit: AmountUnit = .g, per100g: [Double?]
+      amountUnit: AmountUnit = .g, per100g: [Double?], fiber: FiberInput = .unknown
     ) {
       self.name = name
       self.unitType = unitType
@@ -114,6 +125,7 @@ public enum LibraryDrafts {
       self.servingUnit = servingUnit
       self.amountUnit = amountUnit
       self.per100g = per100g
+      self.fiber = fiber
     }
   }
 
@@ -122,7 +134,9 @@ public enum LibraryDrafts {
   {
     let name = input.name.trimmed
     guard !name.isEmpty else { return .failure(.missingName) }
-    guard let per100 = macros(from: input.per100g) else { return .failure(.invalidMacros) }
+    guard var per100 = macros(from: input.per100g) else { return .failure(.invalidMacros) }
+    guard case .value(let fiber) = input.fiber.resolved else { return .failure(.invalidFiber) }
+    per100.fiber = fiber
     var servingSize: Double?
     var servingUnit: String?
     var perServing = MacroTotals.zero
@@ -143,11 +157,13 @@ public enum LibraryDrafts {
   /// Photo food: display macros. A label with an amount eaten converts back to per 100 g (or ml).
   public static func photoDraft(
     name: String, display: [Double?], isLabelPhoto: Bool, labelGrams: Double?,
-    unit: AmountUnit = .g
+    unit: AmountUnit = .g, fiber: FiberInput = .unknown
   ) -> Result<SavedFoodDraft, LibraryDraftError> {
     let name = name.trimmed
     guard !name.isEmpty else { return .failure(.missingPhotoName) }
-    guard let values = macros(from: display) else { return .failure(.invalidMacros) }
+    guard var values = macros(from: display) else { return .failure(.invalidMacros) }
+    guard case .value(let fiberValue) = fiber.resolved else { return .failure(.invalidFiber) }
+    values.fiber = fiberValue
     let per100 =
       isLabelPhoto ? LogItemMath.per100gFromDisplay(values, grams: labelGrams) : values
     return .success(
@@ -180,5 +196,23 @@ public enum LibraryDrafts {
     let finite = values.compactMap { $0 }.filter(\.isFinite)
     guard values.count == 4, finite.count == 4 else { return nil }
     return MacroTotals(calories: finite[0], protein: finite[1], carbs: finite[2], fat: finite[3])
+  }
+}
+
+/// An optional fiber field: empty is unknown, a number ≥ 0 is a value, anything else is invalid.
+public enum FiberInput: Sendable, Hashable {
+  case unknown
+  case text(String)
+
+  public enum Resolved: Sendable, Hashable {
+    case value(Double?)
+    case invalid
+  }
+
+  public var resolved: Resolved {
+    guard case .text(let text) = self, !text.trimmed.isEmpty else { return .value(nil) }
+    guard NumericInput.optionalNutritionError(text) == nil, let value = parseNumberInput(text)
+    else { return .invalid }
+    return .value(value)
   }
 }

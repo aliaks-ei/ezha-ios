@@ -53,6 +53,10 @@ final class TodayUITests: HarnessTestCase {
     meal.press(forDuration: 1.2)
     XCTAssertTrue(app.buttons["Log again"].waitForExistence(timeout: 5))
     XCTAssertTrue(app.buttons["Save as meal"].exists)
+    // PET-107: Log again opens a sheet. Nothing is saved yet.
+    app.buttons["Log again"].tap()
+    XCTAssertTrue(app.buttons["logAgainButton"].waitForExistence(timeout: 5))
+    capture("today-log-again")
   }
 
   /// Swipes up until the element is on screen. Rows below the fold are not loaded yet.

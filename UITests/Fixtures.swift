@@ -53,6 +53,15 @@ enum LoggerFixtures {
           origin: .libraryFood),
       ]
     }
+    if scenario == "reviewFiber" {
+      // PET-115: the estimate has no fiber for the chicken; the rice has fiber per 100 g.
+      state.items += [
+        LogItem(
+          name: "Cooked rice", gramsText: "180", macroBasis: .per100g, baseGrams: 100,
+          base: MacroTotals(calories: 130, protein: 2.7, carbs: 28.2, fat: 0.3, fiber: 0.4),
+          origin: .ai)
+      ]
+    }
     if scenario == "longName" {
       // PET-112: a long name wraps next to the portion control on the compact row.
       state.items += [
@@ -181,6 +190,16 @@ enum LoggerFixtures {
         return bundle
       }
     }
+    if scenario == "todayFiber" || scenario == "todayFiberPartial" {
+      let entries = fiberEntries(partial: scenario == "todayFiberPartial")
+      clients.day.fetchDay = { date in
+        var bundle = PreviewData.day
+        bundle.date = date
+        bundle.entries = entries
+        bundle.totals = entries.reduce(.zero) { $0 + $1.entry.macros }
+        return bundle
+      }
+    }
     if scenario == "todayEmpty" || scenario == "todayMany" {
       // No meals, or nine meals with the newest one still in the outbox.
       let entries = scenario == "todayMany" ? manyEntries() : []
@@ -257,6 +276,43 @@ enum LoggerFixtures {
   static let waterTarget = DailyTarget(
     id: UUID(), name: "Basic", caloriesTarget: 2100, proteinTarget: 140, carbsTarget: 220,
     fatTarget: 70, waterTargetMl: 2000)
+
+  /// PET-115: three meals with 18 g fiber. `partial`: the bowl has no fiber data (14 g known).
+  static func fiberEntries(partial: Bool) -> [DayEntry] {
+    [
+      PreviewData.entry(
+        "Hummus and carrots",
+        MacroTotals(calories: 210, protein: 10, carbs: 18, fat: 14, fiber: 5), minutesAgo: 60),
+      PreviewData.entry(
+        "Chicken and rice bowl",
+        MacroTotals(calories: 610, protein: 48, carbs: 62, fat: 18, fiber: partial ? nil : 4),
+        minutesAgo: 240),
+      PreviewData.entry(
+        "Oatmeal with berries",
+        MacroTotals(calories: 420, protein: 14, carbs: 68, fat: 9, fiber: 9), minutesAgo: 480),
+    ]
+  }
+
+  /// PET-115: a bowl with fiber for two items and none for the sauce.
+  static func fiberBowl() -> DayEntry {
+    let id = UUID()
+    let items = [
+      (
+        "Chicken breast", 150.0, MacroTotals(calories: 248, protein: 46, carbs: 0, fat: 5, fiber: 0)
+      ),
+      ("Cooked rice", 180, MacroTotals(calories: 234, protein: 5, carbs: 50, fat: 1, fiber: 0.7)),
+      ("Teriyaki sauce", 30, MacroTotals(calories: 128, protein: 1, carbs: 12, fat: 12)),
+    ].map { name, grams, macros in
+      FoodEntryItem(
+        id: UUID(), entryId: id, name: name, grams: grams, macros: macros, aiConfidence: 0.8,
+        aiNotes: "")
+    }
+    let entry = FoodEntry(
+      id: id, date: PreviewData.today, inputType: .text, inputText: "Chicken and rice bowl",
+      imagePath: nil, macros: items.reduce(.zero) { $0 + $1.macros }, aiConfidence: 0.8,
+      aiSource: .text, aiNotes: "", createdAt: .now)
+    return DayEntry(entry: entry, items: items)
+  }
 
   /// Nine meals for the Today list, newest first; the newest waits to sync.
   static func manyEntries() -> [DayEntry] {
