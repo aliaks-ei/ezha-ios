@@ -56,11 +56,13 @@ public struct DailyTarget: Codable, Sendable, Hashable, Identifiable {
   public var proteinTarget: Double
   public var carbsTarget: Double
   public var fatTarget: Double
+  /// Daily water in millilitres. Nil: no water target.
+  public var waterTargetMl: Double?
   public var createdAt: Date?
 
   public init(
     id: UUID, userId: UUID? = nil, name: String, caloriesTarget: Double, proteinTarget: Double,
-    carbsTarget: Double, fatTarget: Double, createdAt: Date? = nil
+    carbsTarget: Double, fatTarget: Double, waterTargetMl: Double? = nil, createdAt: Date? = nil
   ) {
     self.id = id
     self.userId = userId
@@ -69,6 +71,7 @@ public struct DailyTarget: Codable, Sendable, Hashable, Identifiable {
     self.proteinTarget = proteinTarget
     self.carbsTarget = carbsTarget
     self.fatTarget = fatTarget
+    self.waterTargetMl = waterTargetMl
     self.createdAt = createdAt
   }
 
@@ -85,6 +88,7 @@ public struct DailyTarget: Codable, Sendable, Hashable, Identifiable {
     case proteinTarget = "protein_target"
     case carbsTarget = "carbs_target"
     case fatTarget = "fat_target"
+    case waterTargetMl = "water_target_ml"
     case createdAt = "created_at"
   }
 }
@@ -294,10 +298,15 @@ public struct DayBundle: Codable, Sendable, Hashable {
   public var totals: MacroTotals
   public var targets: [DailyTarget]
   public var entries: [DayEntry]
+  /// The day's water target in millilitres. Nil: no water target.
+  public var waterTargetMl: Double?
+  /// The day's water entries, newest first.
+  public var water: [WaterEntry]
 
   public init(
     date: DateKey, target: DailyTarget?, goals: MacroTotals, totals: MacroTotals,
-    targets: [DailyTarget], entries: [DayEntry]
+    targets: [DailyTarget], entries: [DayEntry], waterTargetMl: Double? = nil,
+    water: [WaterEntry] = []
   ) {
     self.date = date
     self.target = target
@@ -305,7 +314,30 @@ public struct DayBundle: Codable, Sendable, Hashable {
     self.totals = totals
     self.targets = targets
     self.entries = entries
+    self.waterTargetMl = waterTargetMl
+    self.water = water
   }
+
+  enum CodingKeys: String, CodingKey {
+    case date, target, goals, totals, targets, entries, water
+    case waterTargetMl = "water_target_ml"
+  }
+
+  public init(from decoder: any Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    date = try c.decode(DateKey.self, forKey: .date)
+    target = try c.decodeIfPresent(DailyTarget.self, forKey: .target)
+    goals = try c.decode(MacroTotals.self, forKey: .goals)
+    totals = try c.decode(MacroTotals.self, forKey: .totals)
+    targets = try c.decode([DailyTarget].self, forKey: .targets)
+    entries = try c.decode([DayEntry].self, forKey: .entries)
+    // Cached bundles and servers from before PET-116 have no water keys.
+    waterTargetMl = try c.decodeIfPresent(Double.self, forKey: .waterTargetMl)
+    water = try c.decodeIfPresent([WaterEntry].self, forKey: .water) ?? []
+  }
+
+  /// Total water drunk, in millilitres.
+  public var waterTotal: Double { Water.total(water) }
 
   /// Day totals without one entry. The logger preview adds its meal to this base, so a meal that
   /// is already in the day (logged, pending in the outbox, or synced) is not counted twice.

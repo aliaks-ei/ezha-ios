@@ -16,4 +16,6 @@ extension Color {
   public static let ink = Color("Ink", bundle: .module)
   public static let track = Color("Track", bundle: .module)
   public static let danger = Color("Danger", bundle: .module)
+  /// Water bars, rings, and icons. Not for text: it is below 4.5:1 on light surfaces.
+  public static let water = Color("Water", bundle: .module)
 }

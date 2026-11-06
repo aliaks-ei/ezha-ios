@@ -1,7 +1,8 @@
 import Foundation
 import SwiftData
 
-/// A queued write. Kinds: `logEntry` (payload = `LogPayload`), `deleteEntry` (payload = entry id).
+/// A queued write. Kinds: `logEntry` (payload = `LogPayload`), `deleteEntry` (payload = entry id),
+/// `saveWater` (payload = `WaterEntry`), `deleteWater` (payload = water entry id).
 @Model
 public final class PendingMutation {
   @Attribute(.unique) public var id: UUID
@@ -34,6 +35,8 @@ public final class PendingMutation {
   public enum Kind: String, Sendable, Codable {
     case logEntry
     case deleteEntry
+    case saveWater
+    case deleteWater
   }
 }
 
@@ -49,12 +52,18 @@ public struct PendingItem: Sendable, Hashable, Identifiable {
   public var createdAt: Date
   /// The entry to show as a pending row, for `logEntry`.
   public var logPayload: LogPayload?
+  /// The water entry to show as pending, for `saveWater`.
+  public var waterEntry: WaterEntry?
 }
 
 /// Runs the outbox one item at a time in `createdAt` order.
 @ModelActor
 public actor OutboxProcessor {
   public typealias Perform = @Sendable (PendingMutation.Kind, Data) async throws -> Void
+
+  /// The item `run` is sending now. A water save or delete enqueued meanwhile must not change
+  /// or drop it, because the server may already have it.
+  private var inFlight: UUID?
 
   /// `min(2^max(1, attempts) s, 300 s)`, like `retry-queue-service.ts`.
   public static func backoff(attempts: Int) -> TimeInterval {
@@ -90,6 +99,48 @@ public actor OutboxProcessor {
     return mutation.id
   }
 
+  /// Queues a create or an edit of a water entry. A second save of an entry that is still
+  /// waiting replaces the queued one, so only the last amount is sent.
+  public func enqueueSaveWater(_ entry: WaterEntry, now: Date = .now) throws {
+    var entry = entry
+    entry.isPending = false
+    let data = try JSONEncoder.ezha.encode(entry)
+    if let pending = try mutations(kind: .saveWater, entityId: entry.id).first(where: {
+      $0.id != inFlight
+    }) {
+      pending.payload = data
+      pending.dateKey = entry.date.rawValue
+      pending.nextAttemptAt = now
+    } else {
+      modelContext.insert(
+        PendingMutation(
+          kind: .saveWater, payload: data, entityId: entry.id, dateKey: entry.date.rawValue,
+          nextAttemptAt: now, createdAt: now))
+    }
+    try modelContext.save()
+  }
+
+  /// Queues a water delete that runs after `delay`, so it can be undone.
+  /// Deleting an entry that is still waiting to be saved removes its `saveWater` item instead.
+  /// Returns the id of the queued delete, or nil when a pending save was dropped.
+  @discardableResult
+  public func enqueueDeleteWater(
+    entryId: UUID, date: DateKey, delay: TimeInterval = 5, now: Date = .now
+  ) throws -> UUID? {
+    let saves = try mutations(kind: .saveWater, entityId: entryId)
+    if !saves.isEmpty, !saves.contains(where: { $0.id == inFlight }) {
+      for pending in saves { modelContext.delete(pending) }
+      try modelContext.save()
+      return nil
+    }
+    let mutation = PendingMutation(
+      kind: .deleteWater, payload: Data(entryId.uuidString.utf8), entityId: entryId,
+      dateKey: date.rawValue, nextAttemptAt: now.addingTimeInterval(delay), createdAt: now)
+    modelContext.insert(mutation)
+    try modelContext.save()
+    return mutation.id
+  }
+
   public func remove(id: UUID) throws {
     for mutation in try modelContext.fetch(
       FetchDescriptor<PendingMutation>(predicate: #Predicate { $0.id == id }))
@@ -117,7 +168,9 @@ public actor OutboxProcessor {
         nextAttemptAt: mutation.nextAttemptAt, lastError: mutation.lastError,
         createdAt: mutation.createdAt,
         logPayload: kind == .logEntry
-          ? try? JSONDecoder.ezha.decode(LogPayload.self, from: mutation.payload) : nil)
+          ? try? JSONDecoder.ezha.decode(LogPayload.self, from: mutation.payload) : nil,
+        waterEntry: kind == .saveWater
+          ? try? JSONDecoder.ezha.decode(WaterEntry.self, from: mutation.payload) : nil)
     }
   }
 
@@ -127,8 +180,13 @@ public actor OutboxProcessor {
   public func run(now: Date = .now, perform: Perform) async throws -> Set<String> {
     var changed: Set<String> = []
     let descriptor = FetchDescriptor<PendingMutation>(sortBy: [SortDescriptor(\.createdAt)])
-    for mutation in try modelContext.fetch(descriptor) where mutation.nextAttemptAt <= now {
-      guard let kind = PendingMutation.Kind(rawValue: mutation.kind) else { continue }
+    for mutation in try modelContext.fetch(descriptor) {
+      // An enqueue during an earlier send can remove a later item.
+      guard !mutation.isDeleted, mutation.modelContext != nil, mutation.nextAttemptAt <= now,
+        let kind = PendingMutation.Kind(rawValue: mutation.kind)
+      else { continue }
+      inFlight = mutation.id
+      defer { inFlight = nil }
       do {
         try await perform(kind, mutation.payload)
         changed.insert(mutation.dateKey)

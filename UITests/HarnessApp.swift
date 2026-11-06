@@ -2,7 +2,8 @@ import EZHAKit
 import SwiftUI
 
 /// Shows one screen with fixture data. UI tests pick it with launch environment values:
-/// HARNESS_SCENARIO (see `LoggerFixtures.state`, plus "today" and "libraryTab"),
+/// HARNESS_SCENARIO (see `LoggerFixtures.state`, plus "today", "libraryTab", and the water
+/// scenarios "todayWater…", "waterEntries", "waterAdd", "waterTargetEditor"),
 /// HARNESS_APPEARANCE ("light" or "dark"), HARNESS_LARGE_TEXT ("1" for accessibility3).
 @main
 struct HarnessApp: App {
@@ -28,6 +29,15 @@ struct HarnessApp: App {
       Group {
         if ["today", "todayOver", "todayEmpty", "todayMany"].contains(scenario) {
           TodayView(openLogger: { _ in })
+        } else if scenario.hasPrefix("todayWater") {
+          TodayView(openLogger: { _ in }).overlay { ToastOverlay(toast: $app.toast) }
+        } else if scenario == "waterEntries" || scenario == "waterAdd" {
+          waterSheet
+        } else if scenario == "waterTargetEditor" {
+          Color.clear.sheet(isPresented: .constant(true)) {
+            TargetEditorSheet(target: LoggerFixtures.waterTarget)
+              .environment(\.dynamicTypeSize, size)
+          }
         } else if scenario == "shell" {
           MainShell()
         } else if scenario == "settings" {
@@ -87,6 +97,25 @@ struct HarnessApp: App {
         presented = true
       }
   }
+  /// The water entries sheet or the add water sheet over an empty screen, with today loaded.
+  private var waterSheet: some View {
+    Color.clear
+      .sheet(isPresented: $presented) {
+        Group {
+          if scenario == "waterEntries" {
+            WaterEntriesSheet(date: app.today)
+          } else {
+            WaterEntrySheet(date: app.today)
+          }
+        }
+        .environment(\.dynamicTypeSize, size)
+      }
+      .task {
+        await app.dayStore.load(app.today)
+        presented = true
+      }
+  }
+
   private var draftAccess: LoggerDraftAccess? {
     let live = LoggerDraftAccess.live(app.sync.draftStore)
     if scenario == "slowLog" {

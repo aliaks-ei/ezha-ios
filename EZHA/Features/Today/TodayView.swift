@@ -119,6 +119,10 @@ private struct DayContent: View {
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @State private var isTargetSheetPresented = false
   @State private var detail: DayEntry?
+  @State private var isWaterEntryPresented = false
+  @State private var isWaterListPresented = false
+  @State private var isWaterTargetPresented = false
+  @State private var waterAdds = 0
 
   private var store: DayStore { appModel.dayStore }
 
@@ -141,6 +145,7 @@ private struct DayContent: View {
             TargetButton(bundle: bundle, isToday: isToday) { isTargetSheetPresented = true }
           }
         }
+        waterSection(bundle)
         entriesSection(bundle)
       } else if state == .loading || state == .idle {
         placeholder
@@ -163,6 +168,7 @@ private struct DayContent: View {
       reduceMotion ? .easeInOut(duration: 0.2) : .spring(duration: 0.45, bounce: 0.15),
       value: bundle?.entries.map(\.id)
     )
+    .sensoryFeedback(.impact(weight: .light), trigger: waterAdds)
     .refreshable {
       await appModel.sync.run()
       await store.load(date, force: true)
@@ -173,6 +179,33 @@ private struct DayContent: View {
     }
     .sheet(item: $detail) { entry in
       EntryDetailSheet(entry: entry)
+    }
+    .sheet(isPresented: $isWaterEntryPresented) {
+      WaterEntrySheet(date: date)
+    }
+    .sheet(isPresented: $isWaterListPresented) {
+      WaterEntriesSheet(date: date)
+    }
+    .sheet(isPresented: $isWaterTargetPresented) {
+      TargetEditorSheet(target: bundle?.target)
+    }
+  }
+
+  /// Water drunk vs the day's water target, with one-tap presets. Separate from the macros.
+  private func waterSection(_ bundle: DayBundle) -> some View {
+    Section {
+      WaterCard(
+        drunk: bundle.waterTotal, target: bundle.waterTargetMl,
+        presets: appModel.waterPresets.quickAdd,
+        add: { preset in
+          waterAdds += 1
+          let entry = WaterEntry(date: date, amountMl: preset.amountMl)
+          Task { await WaterActions.add(entry, appModel: appModel) }
+        },
+        addOther: { isWaterEntryPresented = true },
+        setTarget: { isWaterTargetPresented = true })
+    } header: {
+      WaterHeader(count: bundle.water.count) { isWaterListPresented = true }
     }
   }
 

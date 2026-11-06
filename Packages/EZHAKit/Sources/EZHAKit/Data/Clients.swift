@@ -1,24 +1,31 @@
 import Foundation
 import Supabase
 
-/// Day screen data. `get_day`, `set_day_target`, entry delete, entry photos.
+/// Day screen data. `get_day_with_water`, `set_day_target`, entry delete, entry photos, water entries.
 public struct DayClient: Sendable {
   public var fetchDay: @Sendable (DateKey) async throws -> DayBundle
   public var setTarget:
     @Sendable (_ date: DateKey, _ targetId: UUID, _ today: DateKey) async throws -> Void
   public var deleteEntry: @Sendable (UUID) async throws -> Void
   public var imageURL: @Sendable (_ path: String) async throws -> URL
+  /// Creates or edits a water entry (`save_water_entry`). Safe to retry.
+  public var saveWater: @Sendable (WaterEntry) async throws -> Void
+  public var deleteWater: @Sendable (UUID) async throws -> Void
 
   public init(
     fetchDay: @escaping @Sendable (DateKey) async throws -> DayBundle,
     setTarget: @escaping @Sendable (DateKey, UUID, DateKey) async throws -> Void,
     deleteEntry: @escaping @Sendable (UUID) async throws -> Void,
-    imageURL: @escaping @Sendable (String) async throws -> URL
+    imageURL: @escaping @Sendable (String) async throws -> URL,
+    saveWater: @escaping @Sendable (WaterEntry) async throws -> Void,
+    deleteWater: @escaping @Sendable (UUID) async throws -> Void
   ) {
     self.fetchDay = fetchDay
     self.setTarget = setTarget
     self.deleteEntry = deleteEntry
     self.imageURL = imageURL
+    self.saveWater = saveWater
+    self.deleteWater = deleteWater
   }
 }
 
@@ -72,17 +79,29 @@ public struct LibraryClient: Sendable {
   }
 }
 
+/// How a target save treats the water target.
+public enum WaterTargetChange: Sendable, Hashable {
+  /// Leave the water target as it is.
+  case keep
+  /// Set it, in millilitres. Nil removes it.
+  case set(Double?)
+}
+
 /// Daily target CRUD.
 public struct TargetsClient: Sendable {
   public var list: @Sendable () async throws -> [DailyTarget]
   public var save:
-    @Sendable (_ id: UUID?, _ name: String, _ macros: MacroTotals, _ today: DateKey) async throws ->
-      UUID
+    @Sendable (
+      _ id: UUID?, _ name: String, _ macros: MacroTotals, _ water: WaterTargetChange,
+      _ today: DateKey
+    ) async throws -> UUID
   public var delete: @Sendable (_ id: UUID, _ today: DateKey) async throws -> Void
 
   public init(
     list: @escaping @Sendable () async throws -> [DailyTarget],
-    save: @escaping @Sendable (UUID?, String, MacroTotals, DateKey) async throws -> UUID,
+    save:
+      @escaping @Sendable (UUID?, String, MacroTotals, WaterTargetChange, DateKey) async throws
+      -> UUID,
     delete: @escaping @Sendable (UUID, DateKey) async throws -> Void
   ) {
     self.list = list
@@ -97,7 +116,7 @@ extension DayClient {
   public static let live = DayClient(
     fetchDay: { date in
       let data = try await SupabaseProvider.client
-        .rpc("get_day", params: ["p_date": date.rawValue]).execute().data
+        .rpc("get_day_with_water", params: ["p_date": date.rawValue]).execute().data
       return try JSONDecoder.ezha.decode(DayBundle.self, from: data)
     },
     setTarget: { date, targetId, today in
@@ -115,6 +134,19 @@ extension DayClient {
     imageURL: { path in
       try await SupabaseProvider.client.storage.from(SupabaseProvider.imagesBucket)
         .createSignedURL(path: path, expiresIn: 3600)
+    },
+    saveWater: { entry in
+      try await SupabaseProvider.client.rpc(
+        "save_water_entry",
+        params: RPCParams([
+          "p_id": entry.id, "p_date": entry.date.rawValue, "p_amount_ml": entry.amountMl,
+          "p_created_at": entry.createdAt,
+        ])
+      ).execute()
+    },
+    deleteWater: { id in
+      try await SupabaseProvider.client.from("water_entries").delete().eq("id", value: id)
+        .execute()
     }
   )
 }
@@ -197,14 +229,18 @@ extension TargetsClient {
         .order("created_at").execute().data
       return try JSONDecoder.ezha.decode([DailyTarget].self, from: data)
     },
-    save: { id, name, macros, today in
+    save: { id, name, macros, water, today in
+      var params: [String: any Encodable] = [
+        "p_id": id, "p_name": name, "p_calories": macros.calories,
+        "p_protein": macros.protein, "p_carbs": macros.carbs, "p_fat": macros.fat,
+        "p_today": today.rawValue,
+      ]
+      if case .set(let ml) = water {
+        params["p_water_ml"] = ml
+        params["p_update_water"] = true
+      }
       let data = try await SupabaseProvider.client.rpc(
-        "save_daily_target",
-        params: RPCParams([
-          "p_id": id, "p_name": name, "p_calories": macros.calories,
-          "p_protein": macros.protein, "p_carbs": macros.carbs, "p_fat": macros.fat,
-          "p_today": today.rawValue,
-        ])
+        "save_daily_target", params: RPCParams(params)
       ).execute().data
       return try JSONDecoder.ezha.decode(UUID.self, from: data)
     },

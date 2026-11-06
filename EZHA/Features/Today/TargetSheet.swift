@@ -106,13 +106,15 @@ struct TargetSheet: View {
 }
 
 enum TargetFormat {
-  /// "2,100 kcal · P140 · C220 · F70"
+  /// "2,100 kcal · P140 · C220 · F70", then " · Water 2 l" when it has a water target.
   static func summary(_ target: DailyTarget) -> String {
     let n = { (value: Double) in value.formatted(.number.precision(.fractionLength(0))) }
-    return String(
+    let macros = String(
       localized:
         "\(n(target.caloriesTarget)) kcal · P\(n(target.proteinTarget)) · C\(n(target.carbsTarget)) · F\(n(target.fatTarget))"
     )
+    guard let water = target.waterTargetMl, water > 0 else { return macros }
+    return String(localized: "\(macros) · Water \(Water.formatTarget(water))")
   }
 }
 

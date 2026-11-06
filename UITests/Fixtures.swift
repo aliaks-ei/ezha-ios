@@ -205,6 +205,25 @@ enum LoggerFixtures {
         return bundle
       }
     }
+    if scenario.hasPrefix("todayWater") || scenario.hasPrefix("water") {
+      // PET-116: water under, at, and over the 2,000 ml target, or with no target. Saves and
+      // deletes change the fixture day, like the server; offline, they stay in the outbox.
+      let water = FixtureWater(waterEntries(scenario))
+      let target: Double? = scenario == "todayWaterNone" ? nil : 2000
+      clients.day.fetchDay = { date in
+        var bundle = PreviewData.day
+        bundle.date = date
+        bundle.waterTargetMl = target
+        bundle.water = water.all()
+        return bundle
+      }
+      if scenario == "todayWaterOffline" {
+        clients.day.saveWater = { _ in throw URLError(.notConnectedToInternet) }
+      } else {
+        clients.day.saveWater = { water.save($0) }
+        clients.day.deleteWater = { water.delete($0) }
+      }
+    }
     clients.library.list = { libraryFoods() }
     clients.library.ingredients = { _ in
       (1...12).map {
@@ -217,6 +236,27 @@ enum LoggerFixtures {
     app.aiConsent = .allowed
     return app
   }
+
+  /// Water for the scenario, newest first: 1,250 ml (under), 2,000 ml (at), 2,400 ml (over).
+  static func waterEntries(_ scenario: String) -> [WaterEntry] {
+    let amounts: [Double] =
+      switch scenario {
+      case "todayWaterAt": [500, 750, 500, 250]
+      case "todayWaterOver": [650, 750, 500, 500]
+      default: [170, 330, 500, 250]
+      }
+    let today = DateKey.today()
+    return amounts.enumerated().map { index, ml in
+      WaterEntry(
+        date: today, amountMl: ml, createdAt: .now - Double(index + 1) * 5400,
+        isPending: scenario == "waterEntries" && index == 0)
+    }
+  }
+
+  /// A target with a 2,000 ml water target, for the target editor.
+  static let waterTarget = DailyTarget(
+    id: UUID(), name: "Basic", caloriesTarget: 2100, proteinTarget: 140, carbsTarget: 220,
+    fatTarget: 70, waterTargetMl: 2000)
 
   /// Nine meals for the Today list, newest first; the newest waits to sync.
   static func manyEntries() -> [DayEntry] {
@@ -239,5 +279,30 @@ enum LoggerFixtures {
       entry.isPending = index == 0
       return entry
     }
+  }
+}
+
+/// The fixture server's water entries.
+final class FixtureWater: @unchecked Sendable {
+  private let lock = NSLock()
+  private var entries: [WaterEntry]
+
+  init(_ entries: [WaterEntry]) { self.entries = entries }
+
+  func all() -> [WaterEntry] {
+    lock.withLock {
+      entries.sorted { ($0.createdAt ?? .distantPast) > ($1.createdAt ?? .distantPast) }
+    }
+  }
+
+  func save(_ entry: WaterEntry) {
+    lock.withLock {
+      entries.removeAll { $0.id == entry.id }
+      entries.append(entry)
+    }
+  }
+
+  func delete(_ id: UUID) {
+    lock.withLock { entries.removeAll { $0.id == id } }
   }
 }
