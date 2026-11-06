@@ -154,6 +154,11 @@ private struct DayContent: View {
       }
     }
     .scrollContentBackground(.hidden)
+    // One spacing scale (8 / 16 / 24): 8 under the bar, 24 between blocks. The first section
+    // and the "Logged meals" header already add their own top padding, so these values are
+    // smaller than the gaps they make.
+    .contentMargins(.top, 0, for: .scrollContent)
+    .listSectionSpacing(10)
     .animation(
       reduceMotion ? .easeInOut(duration: 0.2) : .spring(duration: 0.45, bounce: 0.15),
       value: bundle?.entries.map(\.id)
@@ -212,16 +217,7 @@ private struct DayContent: View {
         }
       }
     } header: {
-      HStack {
-        Text("Logged meals")
-        Spacer()
-        if !bundle.entries.isEmpty {
-          Text(
-            "\(bundle.totals.calories, format: .number.precision(.fractionLength(0))) kcal eaten"
-          )
-          .monospacedDigit()
-        }
-      }
+      EntriesHeader(eaten: bundle.entries.isEmpty ? nil : bundle.totals.calories)
     } footer: {
       if pending > 0 {
         Text(
@@ -319,26 +315,77 @@ struct SummaryCard<Header: View>: View {
   }
 }
 
-/// A logged meal: title and kcal, then macros and time. Pending rows show "Waiting to sync".
-struct EntryRow: View {
-  var entry: DayEntry
+/// "Logged meals          640 kcal eaten". The total shows only when there are meals.
+private struct EntriesHeader: View {
+  var eaten: Double?
+  @Environment(\.dynamicTypeSize) private var typeSize
 
   var body: some View {
+    if typeSize.isAccessibilitySize {
+      VStack(alignment: .leading, spacing: 2) {
+        title
+        total
+      }
+      .textCase(nil)
+    } else {
+      HStack(alignment: .firstTextBaseline, spacing: 8) {
+        title
+        Spacer(minLength: 0)
+        total
+      }
+      .textCase(nil)
+    }
+  }
+
+  private var title: some View {
+    Text("Logged meals")
+      .font(.title3.weight(.semibold))
+      // Color.primary: header text is secondary by default, and `.primary` follows that.
+      .foregroundStyle(Color.primary)
+      .accessibilityAddTraits(.isHeader)
+  }
+
+  @ViewBuilder private var total: some View {
+    if let eaten {
+      let value = Text(eaten, format: .number.precision(.fractionLength(0)))
+        .fontWeight(.semibold)
+        .fontDesign(.rounded)
+        .foregroundStyle(Color.primary)
+      Text("\(value) kcal eaten")
+        .font(.subheadline)
+        .monospacedDigit()
+        .foregroundStyle(.secondary)
+    }
+  }
+}
+
+/// A logged meal: title and kcal, then macros and time. Pending rows show "Waiting to sync".
+/// At accessibility sizes each pair stacks, so nothing truncates.
+struct EntryRow: View {
+  var entry: DayEntry
+  @Environment(\.dynamicTypeSize) private var typeSize
+
+  var body: some View {
+    let stacked = typeSize.isAccessibilitySize
+    let line =
+      stacked
+      ? AnyLayout(VStackLayout(alignment: .leading, spacing: 2))
+      : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: 12))
     VStack(alignment: .leading, spacing: 4) {
-      HStack(alignment: .firstTextBaseline, spacing: 12) {
+      line {
         Text(entry.title)
           .font(.body.weight(.semibold))
-          .lineLimit(2)
-        Spacer(minLength: 0)
-        KcalText(value: entry.entry.calories)
-          .font(.subheadline.weight(.semibold))
+          .lineLimit(stacked ? nil : 2)
+          .frame(maxWidth: .infinity, alignment: .leading)
+        kcal
           .fixedSize()
       }
-      HStack(alignment: .firstTextBaseline, spacing: 12) {
-        MacroLine(macros: entry.entry.macros)
-        Spacer(minLength: 0)
+      line {
+        MacroDots(macros: entry.entry.macros)
+          .frame(maxWidth: .infinity, alignment: .leading)
         if let time = entry.entry.createdAt {
           Text(time, format: .dateTime.hour().minute())
+            .fontDesign(.rounded)
             .monospacedDigit()
             .fixedSize()
         }
@@ -346,14 +393,69 @@ struct EntryRow: View {
       .font(.subheadline)
       .foregroundStyle(.secondary)
       if entry.isPending {
-        Label("Waiting to sync", systemImage: "clock.arrow.circlepath")
-          .font(.caption.weight(.medium))
-          .foregroundStyle(Color.brandPrimary)
+        // Not a Label: in a List row the icon gets its own column and moves the separator.
+        HStack(spacing: 4) {
+          Image(systemName: "clock.arrow.circlepath")
+            .accessibilityHidden(true)
+          Text("Waiting to sync")
+        }
+        .font(.caption.weight(.medium))
+        .foregroundStyle(Color.brandPrimary)
       }
     }
     .padding(.vertical, 2)
     .contentShape(.rect)
     .accessibilityElement(children: .combine)
+  }
+
+  /// "520 kcal": the number leads, the unit is smaller and secondary.
+  private var kcal: some View {
+    let value = Text(entry.entry.calories, format: .number.precision(.fractionLength(0)))
+      .font(.body.weight(.semibold))
+    let unit = Text("kcal")
+      .font(.footnote.weight(.medium))
+      .foregroundStyle(.secondary)
+    return Text("\(value) \(unit)")
+      .fontDesign(.rounded)
+      .monospacedDigit()
+  }
+}
+
+/// "● P 35 g  ● C 56 g  ● F 14 g". Dot colors match the summary card bars.
+private struct MacroDots: View {
+  var macros: MacroTotals
+  @ScaledMetric(relativeTo: .subheadline) private var dot: CGFloat = 7
+  @Environment(\.dynamicTypeSize) private var typeSize
+
+  var body: some View {
+    let layout =
+      typeSize.isAccessibilitySize
+      ? AnyLayout(VStackLayout(alignment: .leading, spacing: 2))
+      : AnyLayout(HStackLayout(spacing: 10))
+    layout { parts }
+      .fontDesign(.rounded)
+      .monospacedDigit()
+      .accessibilityElement(children: .ignore)
+      .accessibilityLabel(
+        Text(
+          "Protein \(macros.protein, format: .number.precision(.fractionLength(0))) grams, carbs \(macros.carbs, format: .number.precision(.fractionLength(0))) grams, fat \(macros.fat, format: .number.precision(.fractionLength(0))) grams"
+        ))
+  }
+
+  @ViewBuilder private var parts: some View {
+    part("P \(macros.protein, format: .number.precision(.fractionLength(0))) g", .brandSecondary)
+    part("C \(macros.carbs, format: .number.precision(.fractionLength(0))) g", .brandAccent)
+    part("F \(macros.fat, format: .number.precision(.fractionLength(0))) g", .brandPrimary)
+  }
+
+  private func part(_ label: LocalizedStringKey, _ color: Color) -> some View {
+    HStack(spacing: 4) {
+      Circle()
+        .fill(color)
+        .frame(width: dot, height: dot)
+      Text(label)
+        .fixedSize()
+    }
   }
 }
 

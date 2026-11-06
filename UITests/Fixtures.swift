@@ -168,6 +168,17 @@ enum LoggerFixtures {
         return bundle
       }
     }
+    if scenario == "todayEmpty" || scenario == "todayMany" {
+      // No meals, or nine meals with the newest one still in the outbox.
+      let entries = scenario == "todayMany" ? manyEntries() : []
+      clients.day.fetchDay = { date in
+        var bundle = PreviewData.day
+        bundle.date = date
+        bundle.entries = entries
+        bundle.totals = entries.reduce(.zero) { $0 + $1.entry.macros }
+        return bundle
+      }
+    }
     if scenario == "reviewOver" || scenario == "reviewNoTarget" {
       // The review meal (165 kcal, 31 g protein) takes the day over the calorie and protein
       // targets; or the day has no target.
@@ -192,5 +203,28 @@ enum LoggerFixtures {
     let app = AppModel(clients: clients, inMemory: true)
     app.aiConsent = .allowed
     return app
+  }
+
+  /// Nine meals for the Today list, newest first; the newest waits to sync.
+  static func manyEntries() -> [DayEntry] {
+    let meals: [(String, MacroTotals, Double)] = [
+      ("Pasta salad", MacroTotals(calories: 430, protein: 14, carbs: 62, fat: 14), 20),
+      ("Dark chocolate", MacroTotals(calories: 170, protein: 2, carbs: 13, fat: 12), 55),
+      (
+        "Salmon, roasted potatoes and green beans",
+        MacroTotals(calories: 610, protein: 38, carbs: 45, fat: 28), 140
+      ),
+      ("Protein shake", MacroTotals(calories: 180, protein: 30, carbs: 8, fat: 3), 295),
+      ("Apple", MacroTotals(calories: 95, protein: 0, carbs: 25, fat: 0), 370),
+      ("Chicken rice bowl", MacroTotals(calories: 520, protein: 35, carbs: 56, fat: 14), 470),
+      ("Greek yogurt, granola", MacroTotals(calories: 120, protein: 5, carbs: 14, fat: 6), 650),
+      ("Coffee with milk", MacroTotals(calories: 45, protein: 2, carbs: 4, fat: 2), 805),
+      ("Oatmeal with berries", MacroTotals(calories: 310, protein: 10, carbs: 54, fat: 6), 840),
+    ]
+    return meals.enumerated().map { index, meal in
+      var entry = PreviewData.entry(meal.0, meal.1, minutesAgo: meal.2)
+      entry.isPending = index == 0
+      return entry
+    }
   }
 }
