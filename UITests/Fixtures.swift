@@ -156,6 +156,10 @@ enum LoggerFixtures {
         if scenario == "suggestionsLoading" { try await Task.sleep(for: .seconds(3)) }
         return []
       })
+    if scenario == "slowLog" {
+      // Offline: the log stays in the outbox, so the day shows it as a pending entry.
+      clients.logging.logEntry = { _ in throw URLError(.notConnectedToInternet) }
+    }
     if scenario == "todayOver" {
       clients.day.fetchDay = { date in
         var bundle = PreviewData.day

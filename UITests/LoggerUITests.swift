@@ -39,6 +39,24 @@ final class LoggerUITests: HarnessTestCase {
     capture("review-large-text")
   }
 
+  /// PET-110: the queued entry is already in the day while the sheet saves; count it once.
+  func testDayPreviewDoesNotChangeWhileLogging() {
+    launch("slowLog")
+    let remaining = element("dayRemaining")
+    XCTAssertTrue(remaining.waitForExistence(timeout: 5))
+    let before = remaining.value as? String
+    XCTAssertNotNil(before)
+    app.buttons["loggerPrimary"].tap()
+    // The slow draft delete keeps the sheet open for about 5 s after the log is queued.
+    // Sample across that window: the queued entry appears in the day at an unknown moment.
+    for sample in 0..<8 {
+      Thread.sleep(forTimeInterval: 0.5)
+      guard remaining.exists else { break }
+      XCTAssertEqual(remaining.value as? String, before, "sample \(sample)")
+      if sample == 3 { capture("review-saving") }
+    }
+  }
+
   func testGramsEditUpdatesTotalsInPlace() {
     launch()
     app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Increase Portion'")).firstMatch

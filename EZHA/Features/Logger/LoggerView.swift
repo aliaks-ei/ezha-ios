@@ -411,6 +411,8 @@ private struct LoggerContent: View {
     VStack(spacing: 8) {
       if !isEntryVisible {
         let day = appModel.dayStore.merged(model.date).flatMap { $0.goals.calories > 0 ? $0 : nil }
+        // While "Log meal" saves, the day already holds this entry; count it once.
+        let eaten = day?.totals(excluding: model.state.entryId) ?? .zero
         VStack(alignment: .leading, spacing: 8) {
           let stacked = dynamicTypeSize.isAccessibilitySize
           (stacked
@@ -429,16 +431,18 @@ private struct LoggerContent: View {
               .accessibilityIdentifier("reviewTotal")
               if !stacked { Spacer(minLength: 8) }
               if let day {
-                DayImpact.remaining(
-                  day.goals.calories, day.totals.calories + model.totals.calories, unit: "kcal"
-                )
-                .font(.subheadline.weight(.semibold))
-                .accessibilityLabel("Calories after this meal")
+                let after = eaten.calories + model.totals.calories
+                let text = DayImpact.remainingText(day.goals.calories, after, unit: "kcal")
+                DayImpact.remaining(day.goals.calories, after, unit: "kcal")
+                  .font(.subheadline.weight(.semibold))
+                  .accessibilityLabel("Calories after this meal")
+                  .accessibilityValue(text)
+                  .accessibilityIdentifier("dayRemaining")
               }
             }
           if let day {
             DayImpact(
-              goals: day.goals, eaten: day.totals, meal: model.totals,
+              goals: day.goals, eaten: eaten, meal: model.totals,
               isCompact: isShortSheet || isKeyboardVisible || dynamicTypeSize.isAccessibilitySize)
           }
         }
@@ -639,7 +643,7 @@ private struct DayImpact: View {
       .foregroundStyle(Color.primary)
   }
 
-  private static func remainingText(_ goal: Double, _ total: Double, unit: String) -> String {
+  static func remainingText(_ goal: Double, _ total: Double, unit: String) -> String {
     total > goal
       ? String(localized: "\(format(total - goal)) \(unit) over")
       : String(localized: "\(format(goal - total)) \(unit) left")
