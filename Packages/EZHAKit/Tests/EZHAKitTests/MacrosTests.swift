@@ -31,6 +31,25 @@ struct MacrosTests {
     #expect(Macros.calorieStatus(goal: 2100, eaten: 640) == (1460, false))
   }
 
+  @Test func dayTotalsExcludingTheLoggedEntryDoNotCountItTwice() {
+    let entries = [(UUID(), 600.0), (UUID(), 250.0)].map { id, calories in
+      DayEntry(
+        entry: FoodEntry(
+          id: id, date: key("2026-10-05"), inputType: .text, inputText: nil, imagePath: nil,
+          macros: MacroTotals(calories: calories, protein: 10, carbs: 20, fat: 5),
+          aiConfidence: nil, aiSource: .text, aiNotes: "", createdAt: nil),
+        items: [], isPending: calories == 250)
+    }
+    let bundle = DayBundle(
+      date: key("2026-10-05"), target: nil, goals: .zero,
+      totals: Macros.dayTotals(entries.map(\.entry)), targets: [], entries: entries)
+    let logged = entries[1].id
+    let expected = MacroTotals(calories: 600, protein: 10, carbs: 20, fat: 5)
+    #expect(bundle.totals(excluding: logged) == expected)
+    // An entry that is not in the day yet leaves the totals unchanged.
+    #expect(bundle.totals(excluding: UUID()) == bundle.totals)
+  }
+
   @Test func derivesPer100gFromPerServingOnlyFoods() {
     let food = SavedFood(
       id: UUID(), name: "Bar", unitType: .perServing, servingSize: 50,

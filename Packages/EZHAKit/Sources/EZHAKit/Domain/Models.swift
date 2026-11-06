@@ -306,6 +306,13 @@ public struct DayBundle: Codable, Sendable, Hashable {
     self.targets = targets
     self.entries = entries
   }
+
+  /// Day totals without one entry. The logger preview adds its meal to this base, so a meal that
+  /// is already in the day (logged, pending in the outbox, or synced) is not counted twice.
+  public func totals(excluding entryId: UUID) -> MacroTotals {
+    guard entries.contains(where: { $0.id == entryId }) else { return totals }
+    return Macros.dayTotals(entries.filter { $0.id != entryId }.map(\.entry))
+  }
 }
 
 public enum FoodUnitType: String, Codable, Sendable {

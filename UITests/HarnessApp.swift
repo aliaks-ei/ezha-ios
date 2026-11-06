@@ -83,8 +83,17 @@ struct HarnessApp: App {
       }
   }
   private var draftAccess: LoggerDraftAccess? {
-    guard scenario == "draftFailure" else { return nil }
     let live = LoggerDraftAccess.live(app.sync.draftStore)
+    if scenario == "slowLog" {
+      // Keeps the sheet open after the log is queued, so the test can read the preview.
+      return LoggerDraftAccess(
+        load: live.load, save: live.save,
+        delete: { date in
+          try await Task.sleep(for: .seconds(5))
+          try await live.delete(date)
+        })
+    }
+    guard scenario == "draftFailure" else { return nil }
     return LoggerDraftAccess(
       load: live.load,
       save: { _, _, _ in throw AIError.message("Storage unavailable") },
