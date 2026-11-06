@@ -41,7 +41,11 @@ targets:
   EZHAUITests:
     type: bundle.ui-testing
     platform: iOS
-    sources: [LoggerUITests.swift, LibraryUITests.swift, AuditUITests.swift, UXImprovementUITests.swift, HarnessTestCase.swift]
+    # Every *UITests.swift file is a test class. A new file needs no change here.
+    sources:
+      - path: .
+        type: group
+        includes: ["*UITests.swift", HarnessTestCase.swift]
     dependencies:
       - target: HarnessApp
     settings:
