@@ -106,18 +106,22 @@ struct QuickLogSheet: View {
         ToolbarItem(placement: .cancellationAction) {
           Button("Close", systemImage: "xmark") { dismiss() }
         }
+        // Two separate glass circles: the spacer stops iOS 26 from merging them into one
+        // capsule. Both are neutral; only the on state uses the accent, as in Library rows.
         ToolbarItem(placement: .topBarTrailing) {
           Button(
-            current.isFavorite ? "Unfavorite" : "Favorite",
+            current.isFavorite ? "Remove from favorites" : "Add to favorites",
             systemImage: current.isFavorite ? "star.fill" : "star"
           ) {
             Task { await toggleFavorite() }
           }
-          .tint(Color.brandAccent)
+          .tint(current.isFavorite ? Color.brandAccent : Color.primary)
           .accessibilityIdentifier("favoriteButton")
         }
+        ToolbarSpacer(.fixed, placement: .topBarTrailing)
         ToolbarItem(placement: .topBarTrailing) {
-          Button("Edit") { isEditing = true }
+          Button("Edit", systemImage: "pencil") { isEditing = true }
+            .tint(Color.primary)
             .accessibilityIdentifier("editButton")
         }
       }

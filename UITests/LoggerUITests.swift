@@ -323,9 +323,9 @@ final class LoggerUITests: HarnessTestCase {
     yogurt.tap()
     let favorite = app.buttons["favoriteButton"]
     XCTAssertTrue(favorite.waitForExistence(timeout: 5))
-    XCTAssertEqual(favorite.label, "Favorite")
+    XCTAssertEqual(favorite.label, "Add to favorites")
     favorite.tap()
-    XCTAssertEqual(favorite.label, "Unfavorite")
+    XCTAssertTrue(waitForLabel(favorite, "Remove from favorites"))
     capture("library-quicklog-favorite")
     app.buttons["editButton"].tap()
     XCTAssertTrue(app.navigationBars["Edit food"].waitForExistence(timeout: 5))
