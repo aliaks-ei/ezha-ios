@@ -208,4 +208,46 @@ final class LibraryUITests: HarnessTestCase {
     XCTAssertTrue((field.value as? String ?? "").contains("dragon fruit"))
     capture("picker-describe-result")
   }
+
+  /// PET-109: Favorite and Edit are two separate glass circles, and the favorite state shows.
+  func testQuickLogFavoriteAndEditAreSeparate() {
+    let appearances = [("light", false, false), ("dark", true, false), ("large", false, true)]
+    for (suffix, dark, large) in appearances {
+      launch("libraryTab", dark: dark, large: large)
+      let yogurt = app.staticTexts["Greek yogurt"].firstMatch
+      XCTAssertTrue(yogurt.waitForExistence(timeout: 10))
+      yogurt.tap()
+      let favorite = app.buttons["favoriteButton"]
+      let edit = app.buttons["editButton"]
+      XCTAssertTrue(favorite.waitForExistence(timeout: 5))
+      XCTAssertTrue(edit.exists)
+      XCTAssertEqual(favorite.label, "Add to favorites")
+      XCTAssertEqual(edit.label, "Edit")
+      // The fixed spacer leaves a gap between the two glass shapes.
+      XCTAssertLessThan(favorite.frame.maxX, edit.frame.minX - 4)
+      capture("quicklog-favorite-off-\(suffix)")
+      favorite.tap()
+      let on = NSPredicate(format: "label == %@", "Remove from favorites")
+      XCTAssertEqual(
+        XCTWaiter().wait(
+          for: [XCTNSPredicateExpectation(predicate: on, object: favorite)], timeout: 3),
+        .completed)
+      capture("quicklog-favorite-on-\(suffix)")
+    }
+  }
+
+  func testQuickLogMealHasSameToolbar() {
+    launch("libraryTab")
+    XCTAssertTrue(app.staticTexts["Greek yogurt"].firstMatch.waitForExistence(timeout: 10))
+    // The meal sits under "O", below the first screen.
+    let meal = app.staticTexts["Overnight oats"].firstMatch
+    for _ in 0..<6 where !meal.isHittable { app.swipeUp() }
+    XCTAssertTrue(meal.isHittable)
+    meal.tap()
+    let favorite = app.buttons["favoriteButton"]
+    let edit = app.buttons["editButton"]
+    XCTAssertTrue(favorite.waitForExistence(timeout: 5))
+    XCTAssertLessThan(favorite.frame.maxX, edit.frame.minX - 4)
+    capture("quicklog-meal")
+  }
 }
