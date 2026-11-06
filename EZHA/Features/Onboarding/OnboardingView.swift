@@ -91,7 +91,7 @@ struct OnboardingView: View {
     defer { isSaving = false }
     do {
       _ = try await appModel.clients.targets.save(
-        basicTarget?.id, basicTarget?.name ?? "Basic", values, appModel.today)
+        basicTarget?.id, basicTarget?.name ?? "Basic", values, .keep, appModel.today)
       if appModel.aiConsent == .undecided {
         step = .consent
       } else {

@@ -62,10 +62,7 @@ struct SettingsView: View {
           }
         }
       } message: { item in
-        Text(
-          item.kind == .logEntry
-            ? "This meal was not saved to your account and will be lost."
-            : "This entry will not be deleted from your account.")
+        Text(discardMessage(for: item))
       }
       .confirmationDialog(
         "Sign out?", isPresented: $isSignOutConfirmPresented, titleVisibility: .visible
@@ -203,6 +200,19 @@ struct SettingsView: View {
       return String(localized: "Log \(text)")
     case .deleteEntry:
       return String(localized: "Delete an entry")
+    case .saveWater:
+      let amount = item.waterEntry.map { Water.format($0.amountMl) } ?? ""
+      return String(localized: "Water \(amount)")
+    case .deleteWater:
+      return String(localized: "Delete a water entry")
+    }
+  }
+
+  private func discardMessage(for item: PendingItem) -> LocalizedStringKey {
+    switch item.kind {
+    case .logEntry: "This meal was not saved to your account and will be lost."
+    case .saveWater: "This water entry was not saved to your account and will be lost."
+    case .deleteEntry, .deleteWater: "This entry will not be deleted from your account."
     }
   }
 

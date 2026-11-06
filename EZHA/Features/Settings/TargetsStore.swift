@@ -37,8 +37,10 @@ final class TargetsStore {
   }
 
   @discardableResult
-  func save(id: UUID?, name: String, macros: MacroTotals) async throws -> UUID {
-    let newId = try await clients.targets.save(id, name, macros, today())
+  func save(id: UUID?, name: String, macros: MacroTotals, water: WaterTargetChange = .keep)
+    async throws -> UUID
+  {
+    let newId = try await clients.targets.save(id, name, macros, water, today())
     await load()
     await onChange?()
     return newId

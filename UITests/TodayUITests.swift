@@ -40,6 +40,11 @@ final class TodayUITests: HarnessTestCase {
     launch("today")
     let meal = row("Chicken rice bowl")
     XCTAssertTrue(meal.waitForExistence(timeout: 10))
+    // The water card (PET-116) puts the row near the bottom edge, where a swipe can miss.
+    let window = app.windows.firstMatch.frame
+    if meal.frame.maxY > window.height * 0.75 {
+      app.collectionViews.firstMatch.swipeUp(velocity: .slow)
+    }
     meal.swipeLeft()
     XCTAssertTrue(app.buttons["Delete"].waitForExistence(timeout: 5))
     capture("today-swipe")

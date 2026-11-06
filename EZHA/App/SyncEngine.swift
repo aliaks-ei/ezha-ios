@@ -36,6 +36,30 @@ final class SyncEngine {
     Set(items.filter { $0.kind == .deleteEntry }.map(\.entityId))
   }
 
+  /// Water entries created or edited on this device and not synced yet.
+  func pendingWater(on date: DateKey) -> [WaterEntry] {
+    items.filter { $0.kind == .saveWater && $0.date == date }.compactMap(\.waterEntry)
+  }
+
+  func pendingWaterDeletes() -> Set<UUID> {
+    Set(items.filter { $0.kind == .deleteWater }.map(\.entityId))
+  }
+
+  func enqueueSaveWater(_ entry: WaterEntry) async throws {
+    try await processor.enqueueSaveWater(entry)
+    await refresh()
+    await run()
+  }
+
+  /// Queues a water delete after `delay`. Returns the outbox id for undo, or nil when a pending
+  /// save was dropped.
+  func enqueueDeleteWater(entryId: UUID, date: DateKey, delay: TimeInterval) async throws -> UUID? {
+    let id = try await processor.enqueueDeleteWater(entryId: entryId, date: date, delay: delay)
+    await refresh()
+    if delay <= 0 { await run() } else { scheduleWake() }
+    return id
+  }
+
   func refresh() async {
     items = (try? await processor.items()) ?? items
   }
@@ -75,6 +99,11 @@ final class SyncEngine {
       case .deleteEntry:
         guard let id = UUID(uuidString: String(decoding: data, as: UTF8.self)) else { return }
         try await clients.day.deleteEntry(id)
+      case .saveWater:
+        try await clients.day.saveWater(JSONDecoder.ezha.decode(WaterEntry.self, from: data))
+      case .deleteWater:
+        guard let id = UUID(uuidString: String(decoding: data, as: UTF8.self)) else { return }
+        try await clients.day.deleteWater(id)
       }
     }
     isRunning = false

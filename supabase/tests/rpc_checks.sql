@@ -204,6 +204,86 @@ exception when check_violation then
 end;
 $$;
 
+-- Water (PET-116). Targets start with no water target. A 7-argument save keeps the water target.
+select pg_temp.check(
+  (select water_target_ml is null from public.daily_targets where name = 'Basic')
+  and (select d ? 'water_target_ml' and d -> 'water_target_ml' = 'null'::jsonb
+          and jsonb_array_length(d -> 'water') = 0
+         from public.get_day_with_water('2026-10-07') d),
+  'targets have no water target by default and get_day returns an empty water list');
+select public.save_daily_target(
+  (select id from public.daily_targets where name = 'Basic'), 'Basic', 2000, 150, 200, 60, '2026-10-05',
+  2500, true);
+select public.save_daily_target(
+  (select id from public.daily_targets where name = 'Basic'), 'Basic', 2000, 150, 200, 60, '2026-10-05');
+select pg_temp.check(
+  (select water_target_ml = 2500 from public.daily_targets where name = 'Basic')
+  and (select water_target_ml = 2500 from public.daily_summaries where date = '2026-10-05')
+  and (select water_target_ml is null from public.daily_summaries where date = '2026-10-03'),
+  'save_daily_target sets the water target for today and later, and 7 arguments keep it');
+select pg_temp.check(
+  (select (d ->> 'water_target_ml')::numeric = 2500 from public.get_day_with_water('2026-10-07') d)
+  and (select d -> 'water_target_ml' = 'null'::jsonb from public.get_day_with_water('2026-10-03') d),
+  'get_day returns the water target, and past days keep their snapshot');
+
+-- save_water_entry is idempotent, edits by id, and does not change calories or macros.
+select public.save_water_entry('a0000000-0000-0000-0000-000000000001', '2026-10-07', 250, '2026-10-07 08:00:00+00');
+select public.save_water_entry('a0000000-0000-0000-0000-000000000001', '2026-10-07', 250, '2026-10-07 08:00:00+00');
+select public.save_water_entry('a0000000-0000-0000-0000-000000000002', '2026-10-07', 500, '2026-10-07 09:00:00+00');
+select public.save_water_entry('a0000000-0000-0000-0000-000000000002', '2026-10-07', 330, '2026-10-07 10:00:00+00');
+select pg_temp.check(
+  (select count(*) from public.water_entries where date = '2026-10-07') = 2
+  and (select amount_ml = 330 and created_at = '2026-10-07 10:00:00+00'
+         from public.water_entries where id = 'a0000000-0000-0000-0000-000000000002'),
+  'save_water_entry twice keeps one row, and a second save edits the amount and time');
+select pg_temp.check(
+  (select jsonb_array_length(d -> 'water') = 2
+      and d -> 'water' -> 0 ->> 'id' = 'a0000000-0000-0000-0000-000000000002'
+      and (d -> 'water' -> 0 ->> 'amount_ml')::numeric = 330
+      and d -> 'water' -> 0 ->> 'date' = '2026-10-07'
+      and (d -> 'totals' ->> 'calories')::numeric = 0
+      and d ? 'entries' and d ? 'goals'
+     from public.get_day_with_water('2026-10-07') d)
+  and not exists (select 1 from public.daily_summaries where date = '2026-10-07'),
+  'get_day returns water entries newest first, and water does not change totals or summaries');
+delete from public.water_entries where id = 'a0000000-0000-0000-0000-000000000001';
+select pg_temp.check(
+  (select jsonb_array_length(d -> 'water') = 1 from public.get_day_with_water('2026-10-07') d),
+  'a deleted water entry leaves get_day');
+do $$
+begin
+  perform public.save_water_entry('a0000000-0000-0000-0000-000000000003', '2026-10-07', 0);
+  raise exception 'FAILED: 0 ml was accepted';
+exception when check_violation then
+  raise notice 'ok: a water amount of 0 is rejected';
+end;
+$$;
+do $$
+begin
+  perform public.save_daily_target(
+    (select id from public.daily_targets where name = 'Basic'), 'Basic', 2000, 150, 200, 60, '2026-10-05', 0, true);
+  raise exception 'FAILED: a water target of 0 was accepted';
+exception when check_violation then
+  raise notice 'ok: a water target of 0 is rejected';
+end;
+$$;
+select public.save_daily_target(
+  (select id from public.daily_targets where name = 'Basic'), 'Basic', 2000, 150, 200, 60, '2026-10-05',
+  null, true);
+select pg_temp.check(
+  (select water_target_ml is null from public.daily_targets where name = 'Basic')
+  and (select water_target_ml is null from public.daily_summaries where date = '2026-10-05'),
+  'save_daily_target with a null water target removes it');
+select public.save_daily_target(null, 'Hydrate', 1900, 140, 200, 60, '2026-10-05', 3000, true);
+select public.set_day_target('2026-10-08', (select id from public.daily_targets where name = 'Hydrate'), '2026-10-05');
+select pg_temp.check(
+  (select water_target_ml = 3000 from public.daily_summaries where date = '2026-10-08'),
+  'set_day_target copies the water target to the day');
+select public.delete_daily_target((select id from public.daily_targets where name = 'Hydrate'), '2026-10-05');
+select pg_temp.check(
+  (select water_target_ml is null and daily_target_name = 'Basic' from public.daily_summaries where date = '2026-10-08'),
+  'delete_daily_target moves later days to the fallback water target');
+
 -- Fiber is optional. Missing fiber stays null (unknown), never 0. Day totals sum the known values.
 select public.log_food_entry(
   '{"id": "e0000000-0000-0000-0000-000000000009", "date": "2026-10-09", "input_type": "text", "calories": 300, "fiber": 5.4, "ai_source": "text"}',
@@ -256,6 +336,21 @@ $$;
 
 -- As user B, A's rows are invisible.
 select pg_temp.as_user('bbbbbbbb-0000-0000-0000-000000000002');
+do $$
+begin
+  perform public.save_water_entry('a0000000-0000-0000-0000-000000000002', '2026-10-07', 999);
+  raise exception 'FAILED: user B edited a water entry of user A';
+exception when others then
+  if sqlstate <> 'P0002' and sqlstate <> '42501' then
+    raise;
+  end if;
+  raise notice 'ok: user B cannot edit user A''s water entry';
+end;
+$$;
+select pg_temp.check(
+  (select count(*) from public.water_entries) = 0
+  and (select jsonb_array_length(d -> 'water') = 0 from public.get_day_with_water('2026-10-07') d),
+  'user B reads zero water entries of user A');
 select pg_temp.check(
   (select count(*) from public.food_entries) = 0
   and (select count(*) from public.food_entry_items) = 0

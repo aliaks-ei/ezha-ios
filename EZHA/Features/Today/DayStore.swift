@@ -37,7 +37,7 @@ final class DayStore {
 
   func state(for date: DateKey) -> LoadState { states[date] ?? .idle }
 
-  /// The server bundle with pending logs added and pending deletes removed.
+  /// The server bundle with pending logs and water added, and pending deletes removed.
   func merged(_ date: DateKey) -> DayBundle? {
     guard var bundle = bundles[date] ?? fallbackBundle(date) else { return nil }
     let deleted = sync.pendingDeletes()
@@ -48,7 +48,22 @@ final class DayStore {
     bundle.entries = (pending + bundle.entries.filter { !deleted.contains($0.id) })
       .sorted { ($0.entry.createdAt ?? .distantPast) > ($1.entry.createdAt ?? .distantPast) }
     bundle.totals = Macros.dayTotals(bundle.entries.map(\.entry))
+    bundle.water = mergedWater(bundle.water, on: date)
     return bundle
+  }
+
+  /// Queued saves replace their server row (an edit) or add a row. Queued deletes hide it.
+  private func mergedWater(_ water: [WaterEntry], on date: DateKey) -> [WaterEntry] {
+    let deleted = sync.pendingWaterDeletes()
+    let pending = sync.pendingWater(on: date).map { entry in
+      var entry = entry
+      entry.isPending = true
+      return entry
+    }
+    let pendingIds = Set(pending.map(\.id))
+    return (pending + water.filter { !pendingIds.contains($0.id) })
+      .filter { !deleted.contains($0.id) }
+      .sorted { ($0.createdAt ?? .distantPast) > ($1.createdAt ?? .distantPast) }
   }
 
   /// Count of pending entries in the merged day, for the footnote.
@@ -58,12 +73,12 @@ final class DayStore {
 
   /// With no bundle for a date (offline, never loaded), use the goals of the latest cached day.
   private func fallbackBundle(_ date: DateKey) -> DayBundle? {
-    guard !sync.pendingLogs(on: date).isEmpty,
+    guard !sync.pendingLogs(on: date).isEmpty || !sync.pendingWater(on: date).isEmpty,
       let latest = bundles.values.filter({ $0.date < date }).max(by: { $0.date < $1.date })
     else { return nil }
     return DayBundle(
       date: date, target: latest.target, goals: latest.goals, totals: .zero,
-      targets: latest.targets, entries: [])
+      targets: latest.targets, entries: [], waterTargetMl: latest.waterTargetMl)
   }
 
   /// Shows the cached bundle at once, then fetches and writes the cache.
@@ -121,6 +136,44 @@ final class DayStore {
     } catch {
       return nil
     }
+  }
+
+  // MARK: Water
+
+  /// Adds water through the outbox, so it shows at once and syncs later when offline.
+  /// Returns the undo action.
+  func addWater(_ entry: WaterEntry) async throws -> @MainActor () async -> Void {
+    try await sync.enqueueSaveWater(entry)
+    return { [weak self] in _ = await self?.deleteWater(entry, delay: 0) }
+  }
+
+  /// Creates or edits an entry. An edit of an entry that waits to sync replaces the queued save.
+  func saveWater(_ entry: WaterEntry) async throws {
+    try await sync.enqueueSaveWater(entry)
+  }
+
+  /// Hides the entry and deletes it after `delay`. Returns the undo action.
+  func deleteWater(_ entry: WaterEntry, delay: TimeInterval) async -> (@MainActor () async -> Void)?
+  {
+    do {
+      let outboxId = try await sync.enqueueDeleteWater(
+        entryId: entry.id, date: entry.date, delay: delay)
+      if let outboxId {
+        return { [weak self] in await self?.sync.remove(id: outboxId) }
+      }
+      // A pending save was dropped. Undo queues it again.
+      var copy = entry
+      copy.isPending = false
+      return { [weak self] in try? await self?.saveWater(copy) }
+    } catch {
+      return nil
+    }
+  }
+
+  /// Deletes after the undo toast, like a meal.
+  func deleteWaterWithUndo(_ entry: WaterEntry) async -> (@MainActor () async -> Void)? {
+    let window = ToastMessage.undoWindow.components
+    return await deleteWater(entry, delay: Double(window.seconds) + 0.5)
   }
 
   func setTarget(_ targetId: UUID, for date: DateKey) async throws {

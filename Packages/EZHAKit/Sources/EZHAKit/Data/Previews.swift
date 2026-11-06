@@ -84,7 +84,9 @@ extension DayClient {
     fetchDay: { _ in PreviewData.day },
     setTarget: { _, _, _ in },
     deleteEntry: { _ in },
-    imageURL: { _ in URL(string: "https://example.com/photo.jpg")! }
+    imageURL: { _ in URL(string: "https://example.com/photo.jpg")! },
+    saveWater: { _ in },
+    deleteWater: { _ in }
   )
 }
 
@@ -111,7 +113,7 @@ extension LibraryClient {
 extension TargetsClient {
   public static let preview = TargetsClient(
     list: { [PreviewData.basic, PreviewData.cut] },
-    save: { id, _, _, _ in id ?? UUID() },
+    save: { id, _, _, _, _ in id ?? UUID() },
     delete: { _, _ in }
   )
 }
