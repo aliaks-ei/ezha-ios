@@ -137,7 +137,9 @@ private struct DayContent: View {
 
       if let bundle {
         Section {
-          SummaryCard(goals: bundle.goals, totals: bundle.totals) {
+          SummaryCard(
+            goals: bundle.goals, totals: bundle.totals, fiber: FiberSummary.day(bundle.entries)
+          ) {
             TargetButton(bundle: bundle, isToday: isToday) { isTargetSheetPresented = true }
           }
         }
@@ -283,9 +285,11 @@ private struct TargetButton: View {
 }
 
 /// Header, then the ring and three bars. Side by side when there is room, stacked otherwise.
+/// With `fiber`, a fiber line closes the card.
 struct SummaryCard<Header: View>: View {
   var goals: MacroTotals
   var totals: MacroTotals
+  var fiber: FiberSummary?
   @ViewBuilder var header: Header
 
   var body: some View {
@@ -302,6 +306,9 @@ struct SummaryCard<Header: View>: View {
         }
       }
       .frame(maxWidth: .infinity)
+      if let fiber {
+        FiberLine(summary: fiber).padding(.top, 8)
+      }
     }
     .padding(.bottom, 8)
   }
@@ -312,6 +319,83 @@ struct SummaryCard<Header: View>: View {
       MacroBar(title: "Carbs", goal: goals.carbs, eaten: totals.carbs, color: .brandAccent)
       MacroBar(title: "Fat", goal: goals.fat, eaten: totals.fat, color: .brandPrimary)
     }
+  }
+}
+
+/// "Fiber        18 g eaten". No bar and no "left": fiber has no goal (PET-115).
+/// Some foods without fiber data: "≥ 14 g eaten" and a note. No data at all: "Not known", never 0.
+struct FiberLine: View {
+  var summary: FiberSummary
+
+  private var grams: String? {
+    summary.grams.map { $0.formatted(.number.precision(.fractionLength(0))) }
+  }
+
+  private var note: String? {
+    guard summary.grams != nil else { return String(localized: "These meals have no fiber data") }
+    switch summary.unknownMeals {
+    case 0: return nil
+    case 1: return String(localized: "1 meal has no fiber data")
+    default: return String(localized: "\(summary.unknownMeals) meals have no fiber data")
+    }
+  }
+
+  private var title: some View {
+    Text("Fiber").font(.subheadline.weight(.semibold))
+  }
+
+  @ViewBuilder private var value: some View {
+    if let grams {
+      let number = Text(summary.isComplete ? "\(grams) g" : "≥ \(grams) g")
+        .fontWeight(.semibold)
+        .foregroundStyle(Color.primary)
+      Text("\(number) \(Text("eaten").foregroundStyle(.secondary))")
+        .font(.subheadline)
+        .fontDesign(.rounded)
+        .monospacedDigit()
+    } else {
+      Text("Not known")
+        .font(.subheadline)
+        .foregroundStyle(.secondary)
+    }
+  }
+
+  private var accessibilityValue: String {
+    guard let grams else { return String(localized: "Not known. \(note ?? "")") }
+    let amount =
+      summary.isComplete
+      ? String(localized: "\(grams) grams eaten")
+      : String(localized: "At least \(grams) grams eaten")
+    return [amount, note].compactMap { $0 }.joined(separator: ". ")
+  }
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 2) {
+      // Side by side when it fits; stacked at large text sizes.
+      ViewThatFits(in: .horizontal) {
+        HStack(alignment: .firstTextBaseline) {
+          title.fixedSize()
+          Spacer()
+          value.fixedSize()
+        }
+        VStack(alignment: .leading, spacing: 2) {
+          title
+          value
+        }
+      }
+      if let note {
+        Text(note)
+          .font(.caption)
+          .foregroundStyle(.secondary)
+      }
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .padding(.top, 12)
+    .overlay(alignment: .top) { Divider() }
+    .accessibilityElement(children: .ignore)
+    .accessibilityLabel("Fiber")
+    .accessibilityValue(accessibilityValue)
+    .accessibilityIdentifier("fiberLine")
   }
 }
 

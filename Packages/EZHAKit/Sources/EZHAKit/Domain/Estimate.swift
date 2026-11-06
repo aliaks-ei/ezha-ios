@@ -33,6 +33,8 @@ public struct Estimate: Codable, Sendable, Hashable {
     public var protein: Double
     public var carbs: Double
     public var fat: Double
+    /// Nil is unknown, never 0.
+    public var fiber: Double?
     public var confidence: Double?
     public var notes: String?
     public var nutritionSource: String?
@@ -51,6 +53,7 @@ public struct Estimate: Codable, Sendable, Hashable {
       self.protein = macros.protein
       self.carbs = macros.carbs
       self.fat = macros.fat
+      self.fiber = macros.fiber
       self.confidence = confidence
       self.notes = notes
       self.nutritionSource = nutritionSource
@@ -59,11 +62,11 @@ public struct Estimate: Codable, Sendable, Hashable {
     }
 
     public var macros: MacroTotals {
-      MacroTotals(calories: calories, protein: protein, carbs: carbs, fat: fat)
+      MacroTotals(calories: calories, protein: protein, carbs: carbs, fat: fat, fiber: fiber)
     }
 
     enum CodingKeys: String, CodingKey {
-      case name, grams, unit, calories, protein, carbs, fat, confidence, notes
+      case name, grams, unit, calories, protein, carbs, fat, fiber, confidence, notes
       case nutritionSource = "nutrition_source"
       case nutritionSourceId = "nutrition_source_id"
       case portionEstimated = "portion_estimated"
@@ -78,6 +81,9 @@ public struct Estimate: Codable, Sendable, Hashable {
       protein = try c.decode(Double.self, forKey: .protein)
       carbs = try c.decode(Double.self, forKey: .carbs)
       fat = try c.decode(Double.self, forKey: .fat)
+      // Optional: a missing or invalid value is unknown, not an error and not 0.
+      fiber = (try? c.decodeIfPresent(Double.self, forKey: .fiber))?
+        .flatMap { $0.isFinite && $0 >= 0 ? $0 : nil }
       confidence = try c.decodeIfPresent(Double.self, forKey: .confidence)
       notes = try c.decodeIfPresent(String.self, forKey: .notes)
       nutritionSource = try c.decodeIfPresent(String.self, forKey: .nutritionSource)

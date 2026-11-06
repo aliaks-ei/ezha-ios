@@ -56,6 +56,7 @@ const label = (
     protein: 10,
     carbs: 70,
     fat: 10,
+    fiber: null,
     reference_mass_grams: 100,
     notes: "",
     ...overrides,
@@ -546,5 +547,135 @@ Deno.test("invalid input and excluded models make no provider call", async () =>
     (await handler(request({ items: [{ name: "Chicken", grams: "100" }] })))
       .status,
     400,
+  );
+});
+Deno.test("labels keep printed fiber per 100 g; a label without fiber stays unknown", () => {
+  const serving = normalizeLabel(
+    label({
+      basis: "per_serving",
+      reference_mass_grams: 30,
+      calories: 120,
+      protein: 3,
+      carbs: 21,
+      fat: 3,
+      fiber: 3,
+    }),
+  );
+  equal(serving.items[0].fiber, 10);
+  equal(serving.totals.fiber, 10);
+  equal(normalizeLabel(label({ fiber: 0 })).items[0].fiber, 0);
+  equal(normalizeLabel(label()).items[0].fiber, null);
+  // Invalid fiber is unknown, not an error and not 0.
+  equal(normalizeLabel(label({ fiber: -1 })).items[0].fiber, null);
+  equal(normalizeLabel(label({ fiber: 120 })).items[0].fiber, null);
+  const schema = buildModelBody({
+    model: DEFAULT_MODEL,
+    isLabel: true,
+    text: "",
+    imageUrl: "https://image",
+    items: [],
+    catalog: [],
+  }).text.format.schema as unknown as {
+    properties: {
+      label: { anyOf: [{ properties: Record<string, unknown> }] };
+    };
+  };
+  equal(schema.properties.label.anyOf[0].properties.fiber, {
+    type: ["number", "null"],
+  });
+});
+Deno.test("text estimates give fiber from USDA references and model fallbacks", () => {
+  const rice = normalizeMeal(
+    meal({ name: "Rice", amount: 180, catalog_id: "usda:168878" }),
+    foods as CatalogFood[],
+    "text",
+  );
+  equal(rice.items[0].fiber, 0.72);
+  equal(rice.totals.fiber, 0.72);
+  const chicken = normalizeMeal(meal(), foods as CatalogFood[], "text");
+  equal(chicken.items[0].fiber, 0); // A known 0, not unknown.
+  const fallback = (fiber: number | null | undefined) =>
+    meal({
+      name: "Lentil soup",
+      amount: 300,
+      catalog_id: null,
+      fallback_per100g: { calories: 60, protein: 4, carbs: 9, fat: 1, fiber },
+    });
+  equal(normalizeMeal(fallback(2), [], "text").items[0].fiber, 6);
+  equal(normalizeMeal(fallback(null), [], "text").items[0].fiber, null);
+  equal(normalizeMeal(fallback(undefined), [], "text").items[0].fiber, null);
+  // One unknown item makes the meal total unknown; items keep their own values.
+  const mixed = normalizeMeal(
+    {
+      ...meal(),
+      items: [
+        ...fallback(null).items,
+        { ...meal().items[0], catalog_id: "usda:168878", name: "Rice" },
+      ],
+    },
+    foods as CatalogFood[],
+    "text",
+  );
+  equal(mixed.items.map((item) => item.fiber), [null, 0.6]);
+  equal(mixed.totals.fiber, null);
+  const schema = buildModelBody({
+    model: DEFAULT_MODEL,
+    isLabel: false,
+    text: "soup",
+    imageUrl: null,
+    items: [],
+    catalog: [],
+  }).text.format.schema as unknown as {
+    properties: {
+      items: {
+        items: {
+          properties: {
+            fallback_per100g: {
+              anyOf: [{ properties: Record<string, unknown> }];
+            };
+          };
+        };
+      };
+    };
+  };
+  equal(
+    schema.properties.items.items.properties.fallback_per100g.anyOf[0]
+      .properties.fiber,
+    { type: ["number", "null"] },
+  );
+  assert(
+    (foods as CatalogFood[]).every((food) =>
+      typeof food.per100g.fiber === "number"
+    ),
+  );
+});
+Deno.test("library foods pass their optional fiber per 100 g", () => {
+  const row = {
+    id: "abc",
+    name: "Oats",
+    is_meal: false,
+    calories_per_100g: 379,
+    protein_per_100g: 13,
+    carbs_per_100g: 68,
+    fat_per_100g: 6.5,
+    fiber_per_100g: 10,
+  };
+  equal(libraryFood(row)?.per100g.fiber, 10);
+  equal(libraryFood({ ...row, fiber_per_100g: null })?.per100g.fiber, null);
+  const serving = {
+    id: "abc",
+    name: "Bar",
+    is_meal: false,
+    serving_size: 40,
+    calories_per_serving: 160,
+    protein_per_serving: 4,
+    carbs_per_serving: 24,
+    fat_per_serving: 5,
+    fiber_per_serving: 2,
+  };
+  equal(libraryFood(serving)?.per100g.fiber, 5);
+  equal(
+    libraryFood({ ...serving, fiber_per_serving: null })?.per100g.fiber,
+    null,
   );
 });

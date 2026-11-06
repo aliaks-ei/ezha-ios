@@ -128,7 +128,7 @@ final class LoggerModel {
   var hasInvalidEdits: Bool {
     state.items.contains { NumericInput.portionError($0.gramsText) != nil }
       || (state.nutritionEdits ?? [:]).values.contains {
-        $0.values.contains { NumericInput.nutritionError($0) != nil }
+        $0.contains { Self.nutritionEditError(field: $0.key, text: $0.value) != nil }
       }
   }
   var totals: MacroTotals { state.items.reduce(.zero) { $0 + macros(for: $1) } }
@@ -617,13 +617,38 @@ final class LoggerModel {
     }
   }
 
+  /// Fiber is optional: empty text means unknown, not 0.
+  static let fiberField = "fiber"
+
+  func fiberText(_ item: LogItem) -> String {
+    state.nutritionEdits?[item.id]?[Self.fiberField]
+      ?? item.per100g.fiber.map { Macros.format($0, maxFractionDigits: 1) } ?? ""
+  }
+
+  func setFiberText(_ id: UUID, _ text: String) {
+    var edits = state.nutritionEdits ?? [:]
+    edits[id, default: [:]][Self.fiberField] = text
+    state.nutritionEdits = edits
+    guard case .value(let fiber) = FiberInput.text(text).resolved else { return }
+    updatePer100g(id) { $0.fiber = fiber }
+  }
+
+  /// The error for one edited nutrition field, or nil.
+  static func nutritionEditError(field: String, text: String) -> String? {
+    field == fiberField
+      ? NumericInput.optionalNutritionError(text) : NumericInput.nutritionError(text)
+  }
+
   /// Sets one per-100 g (or ml) value. The item keeps its amount and is stored per 100 from now on.
   func setPer100g(_ id: UUID, _ keyPath: WritableKeyPath<MacroTotals, Double>, _ value: Double) {
-    guard value.isFinite, value >= 0,
-      let index = state.items.firstIndex(where: { $0.id == id })
-    else { return }
+    guard value.isFinite, value >= 0 else { return }
+    updatePer100g(id) { $0[keyPath: keyPath] = value }
+  }
+
+  private func updatePer100g(_ id: UUID, _ change: (inout MacroTotals) -> Void) {
+    guard let index = state.items.firstIndex(where: { $0.id == id }) else { return }
     var per100g = state.items[index].per100g
-    per100g[keyPath: keyPath] = value
+    change(&per100g)
     state.items[index].macroBasis = .per100g
     state.items[index].baseGrams = 100
     state.items[index].base = per100g

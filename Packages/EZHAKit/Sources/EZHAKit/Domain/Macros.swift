@@ -71,3 +71,42 @@ public enum Macros {
     protein * 4 + carbs * 4 + fat * 9
   }
 }
+
+/// The fiber eaten in a day. Fiber has no goal; this is display data only.
+public struct FiberSummary: Sendable, Hashable {
+  /// Sum of the known values, in grams. Nil when meals are logged but none has fiber data.
+  public var grams: Double?
+  /// Meals with at least one food without fiber data. Their known foods still count in `grams`.
+  public var unknownMeals: Int
+
+  public init(grams: Double?, unknownMeals: Int) {
+    self.grams = grams
+    self.unknownMeals = unknownMeals
+  }
+
+  /// True when `grams` is the full total. False when it is a lower bound or unknown.
+  public var isComplete: Bool { unknownMeals == 0 && grams != nil }
+
+  /// A day with no meals: 0 g is known. Meals without any fiber data: unknown, not 0.
+  public static func day(_ entries: [DayEntry]) -> FiberSummary {
+    var grams: Double?
+    var unknown = 0
+    for entry in entries {
+      if let fiber = entryFiber(entry) { grams = (grams ?? 0) + fiber }
+      if !isEntryComplete(entry) { unknown += 1 }
+    }
+    return FiberSummary(grams: entries.isEmpty ? 0 : grams, unknownMeals: unknown)
+  }
+
+  /// The entry's known fiber: its stored sum, or the sum of its known items.
+  public static func entryFiber(_ entry: DayEntry) -> Double? {
+    if let fiber = entry.entry.fiber { return fiber }
+    let known = entry.items.compactMap(\.fiber)
+    return known.isEmpty ? nil : known.reduce(0, +)
+  }
+
+  /// Every item has fiber, or (an entry without items) the entry has it.
+  public static func isEntryComplete(_ entry: DayEntry) -> Bool {
+    entry.items.isEmpty ? entry.entry.fiber != nil : entry.items.allSatisfy { $0.fiber != nil }
+  }
+}
