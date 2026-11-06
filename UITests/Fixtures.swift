@@ -168,6 +168,19 @@ enum LoggerFixtures {
         return bundle
       }
     }
+    if scenario == "reviewOver" || scenario == "reviewNoTarget" {
+      // The review meal (165 kcal, 31 g protein) takes the day over the calorie and protein
+      // targets; or the day has no target.
+      let goals =
+        scenario == "reviewOver"
+        ? MacroTotals(calories: 700, protein: 60, carbs: 120, fat: 30) : .zero
+      clients.day.fetchDay = { date in
+        var bundle = PreviewData.day
+        bundle.date = date
+        bundle.goals = goals
+        return bundle
+      }
+    }
     clients.library.list = { libraryFoods() }
     clients.library.ingredients = { _ in
       (1...12).map {
