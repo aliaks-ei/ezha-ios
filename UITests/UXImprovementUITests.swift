@@ -21,6 +21,10 @@ final class UXImprovementUITests: HarnessTestCase {
   private var descriptionField: XCUIElement {
     app.textViews["mealText"].exists ? app.textViews["mealText"] : app.textFields["mealText"]
   }
+  private func hideKeyboardIfVisible() {
+    let button = app.buttons["Hide keyboard"]
+    if button.waitForExistence(timeout: 1), button.isHittable { button.tap() }
+  }
   /// Close with input asks first; "Keep editing" leaves the meal as it was.
   private func closeAndKeepEditing() {
     app.buttons["Close"].firstMatch.tap()
@@ -61,7 +65,7 @@ final class UXImprovementUITests: HarnessTestCase {
     XCTAssertGreaterThanOrEqual(region.frame.width + 0.000_001, 44)
     region.coordinate(withNormalizedOffset: CGVector(dx: 0.8, dy: 0.05)).tap()
     XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 3))
-    app.buttons["Hide keyboard"].tap()
+    hideKeyboardIfVisible()
     for invalid in ["", "-5", "abc", "99999"] {
       replace(portion, with: invalid)
       XCTAssertTrue(
@@ -70,14 +74,14 @@ final class UXImprovementUITests: HarnessTestCase {
       XCTAssertFalse(app.buttons["loggerPrimary"].isEnabled)
     }
     capture("ux-invalid-portion-keyboard")
-    app.buttons["Hide keyboard"].tap()
+    hideKeyboardIfVisible()
     XCTAssertEqual(portion.value as? String, "99999")
     XCTAssertTrue(app.descendants(matching: .any)["reviewTotal"].label.contains("Last valid total"))
     closeAndKeepEditing()
     XCTAssertEqual(portion.value as? String, "99999")
     XCTAssertFalse(app.buttons["loggerPrimary"].isEnabled)
     replace(portion, with: "150,5")
-    app.buttons["Hide keyboard"].tap()
+    hideKeyboardIfVisible()
     XCTAssertTrue(app.buttons["loggerPrimary"].isEnabled)
     capture("ux-portion-corrected")
   }
