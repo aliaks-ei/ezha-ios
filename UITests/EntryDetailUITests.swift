@@ -19,4 +19,16 @@ final class EntryDetailUITests: HarnessTestCase {
     XCTAssertTrue(app.buttons["Save as meal"].exists)
     capture("entry-detail-\(name)")
   }
+
+  /// PET-107: Log again opens the Log again sheet over the detail sheet.
+  func testLogAgainOpensSheet() {
+    launch("entryDetail")
+    let logAgain = app.buttons["entryLogAgain"]
+    XCTAssertTrue(logAgain.waitForExistence(timeout: 10))
+    if !logAgain.isHittable { app.collectionViews.firstMatch.swipeUp() }
+    logAgain.tap()
+    XCTAssertTrue(app.buttons["logAgainButton"].waitForExistence(timeout: 5))
+    XCTAssertTrue(app.buttons["logAgainDay"].waitForExistence(timeout: 5))
+    capture("entry-detail-log-again")
+  }
 }
