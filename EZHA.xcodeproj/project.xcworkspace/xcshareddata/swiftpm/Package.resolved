@@ -1,5 +1,5 @@
 {
-  "originHash" : "4a61c5d585e0eaad43ebed3843bffe73ec31916ff77d2e0f50a3b5e4bf4aca24",
+  "originHash" : "a364e340f562f5f573e1170987504cdb375feebdeb9651776f84571cd0d62c28",
   "pins" : [
     {
       "identity" : "supabase-swift",
@@ -53,6 +53,15 @@
       "state" : {
         "revision" : "bff4b6903cdc99dda49649dd52f46c11cfd3ed50",
         "version" : "1.8.0"
+      }
+    },
+    {
+      "identity" : "swift-issue-reporting",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/pointfreeco/swift-issue-reporting",
+      "state" : {
+        "revision" : "b23bb4493c439d3e05152bc167014235ba3d47fc",
+        "version" : "2.1.2"
       }
     },
     {
