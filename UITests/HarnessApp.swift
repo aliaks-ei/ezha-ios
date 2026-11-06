@@ -53,6 +53,11 @@ struct HarnessApp: App {
           QuickLogSheet(food: LoggerFixtures.drinkFood)
         } else if scenario == "mealEditor" {
           MealEditorSheet(meal: PreviewData.foods[2])
+        } else if scenario == "entryDetail" {
+          Color.clear.sheet(isPresented: .constant(true)) {
+            EntryDetailSheet(entry: PreviewData.entries[0])
+              .environment(\.dynamicTypeSize, size)
+          }
         } else if scenario == "libraryTab" {
           LibraryView().overlay { ToastOverlay(toast: $app.toast) }
         } else {

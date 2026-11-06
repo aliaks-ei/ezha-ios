@@ -61,11 +61,14 @@ struct EntryDetailSheet: View {
             EntryActions.saveAsMeal(entry, appModel: appModel)
             dismiss()
           }
-          Button("Delete", systemImage: "trash", role: .destructive) {
+          Button(role: .destructive) {
             EntryActions.delete(entry, appModel: appModel)
             dismiss()
+          } label: {
+            // The destructive role colors only the title in a List row; the icon keeps the accent.
+            Label("Delete", systemImage: "trash").foregroundStyle(.red)
           }
-          .disabled(false)
+          .accessibilityIdentifier("entryDelete")
         }
       }
       .navigationTitle(entry.title)
