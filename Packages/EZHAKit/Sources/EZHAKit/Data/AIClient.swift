@@ -4,10 +4,13 @@ import Supabase
 public struct EstimateRequest: Codable, Sendable, Hashable {
   public struct Item: Codable, Sendable, Hashable {
     public var name: String
+    /// Amount in `unit`.
     public var grams: Double
-    public init(name: String, grams: Double) {
+    public var unit: AmountUnit
+    public init(name: String, grams: Double, unit: AmountUnit = .g) {
       self.name = name
       self.grams = grams
+      self.unit = unit
     }
   }
 

@@ -57,7 +57,7 @@ public enum EntryPayload {
     hasPhoto ? (isLabelPhoto ? "label_photo" : "food_photo") : "text"
   }
 
-  /// Rows skip items with no name, grams ≤ 0, or missing nutrition.
+  /// Rows skip items with no name, amount ≤ 0, or missing nutrition.
   public static func entryItems(entryId: UUID, from items: [LogItem]) -> [FoodEntryItem] {
     items.compactMap { item in
       let name = item.name.trimmed
@@ -65,8 +65,8 @@ public enum EntryPayload {
         !item.isNutritionMissing
       else { return nil }
       return FoodEntryItem(
-        id: UUID(), entryId: entryId, name: name, grams: grams, macros: LogItemMath.macros(item),
-        aiConfidence: item.aiConfidence, aiNotes: item.aiNotes)
+        id: UUID(), entryId: entryId, name: name, grams: grams, unit: item.unit,
+        macros: LogItemMath.macros(item), aiConfidence: item.aiConfidence, aiNotes: item.aiNotes)
     }
   }
 
@@ -134,7 +134,7 @@ public enum AnalyzeGate {
     "Your photo or description changed. Update the estimate before logging."
   public static let missingNutritionMessage =
     "Remove items with missing nutrition before logging."
-  public static let noItemsMessage = "Add at least one item with grams before logging."
+  public static let noItemsMessage = "Add at least one item with an amount before logging."
 
   /// Estimate when there is text or a photo that was not analyzed yet. Otherwise log.
   public static func primaryAction(current: Fingerprint, lastAnalyzed: Fingerprint?)

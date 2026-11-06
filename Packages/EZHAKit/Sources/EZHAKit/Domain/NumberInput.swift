@@ -19,9 +19,11 @@ public enum NumericInput {
   /// A generous entry limit, not a nutrition recommendation.
   public static let maxNutritionValue: Double = 100_000
 
-  public static func portionError(_ text: String) -> String? {
+  public static func portionError(_ text: String, unit: AmountUnit = .g) -> String? {
     guard let value = parseNumberInput(text), value > 0, value <= LogItemMath.maxGrams else {
-      return String(localized: "Enter a portion greater than 0 and no more than 5,000 g.")
+      return unit == .ml
+        ? String(localized: "Enter a portion greater than 0 and no more than 5,000 ml.")
+        : String(localized: "Enter a portion greater than 0 and no more than 5,000 g.")
     }
     return nil
   }

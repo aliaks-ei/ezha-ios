@@ -1,7 +1,7 @@
 import EZHAKit
 import SwiftUI
 
-/// A decimal grams field with − and + buttons that repeat while held.
+/// A decimal amount field (g, ml or portions) with − and + buttons that repeat while held.
 struct GramsField: View {
   @Binding var text: String
   var onStep: (Double) -> Void
@@ -26,7 +26,7 @@ struct GramsField: View {
       .accessibilityLabel("Decrease \(accessibilityName)")
 
       HStack(spacing: 2) {
-        TextField("Grams", text: $text)
+        TextField("Amount", text: $text)
           .keyboardType(.decimalPad)
           .multilineTextAlignment(.trailing)
           .fontDesign(.rounded)
@@ -35,7 +35,7 @@ struct GramsField: View {
           .fixedSize()
           .frame(minWidth: 44, minHeight: 44, alignment: .trailing)
           .accessibilityLabel(accessibilityName)
-        Text(unit).foregroundStyle(.secondary)
+        Text(unit).foregroundStyle(.secondary).lineLimit(1).fixedSize()
       }
       .frame(minWidth: 44, minHeight: 44)
       .padding(.horizontal, 8)
@@ -61,4 +61,18 @@ struct GramsField: View {
       if !focused { onFocusLost() }
     }
   }
+}
+
+extension AmountUnit {
+  /// "g" or "ml", the visible unit after an amount field.
+  var label: LocalizedStringKey { LocalizedStringKey(symbol) }
+
+  /// Column heading: "Per 100 g" or "Per 100 ml".
+  var per100Title: LocalizedStringKey { self == .ml ? "Per 100 ml" : "Per 100 g" }
+
+  /// Inline text: "per 100 g" or "per 100 ml".
+  var per100Text: LocalizedStringKey { self == .ml ? "per 100 ml" : "per 100 g" }
+
+  /// Portion editor field title.
+  var amountEatenTitle: LocalizedStringKey { self == .ml ? "Millilitres" : "Grams eaten" }
 }

@@ -102,7 +102,7 @@ struct LibraryPickerView: View {
             VStack(alignment: .leading, spacing: 8) {
               Text(selected.food.name).font(.headline)
               ForEach(selected.items) { item in
-                LabeledContent(item.name, value: "\(item.gramsText) g")
+                LabeledContent(item.name, value: "\(item.gramsText) \(item.unit.symbol)")
               }
               Button("Remove", role: .destructive) {
                 selection.removeAll { $0.food.id == selected.food.id }

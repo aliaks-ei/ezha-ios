@@ -69,7 +69,8 @@ const meal = (
   review: null,
   items: [{
     name: "Chicken breast",
-    grams: 150,
+    amount: 150,
+    unit: "g",
     portion_basis: "user_weight",
     identification: "clear",
     catalog_id: "usda:171477",
@@ -157,12 +158,17 @@ Deno.test("labels normalize their printed column once, preserving energy", () =>
   equal(normalizeLabel(label({ calories: 300 })).totals.calories, 300); // Do not force label energy to 4/4/9.
   equal(normalizeLabel(label()).nutrition_basis, "per_100g");
 });
-Deno.test("volume and serving labels require printed mass, never inferred density", () => {
-  throws(
-    () =>
-      normalizeLabel(label({ basis: "per_100ml", reference_mass_grams: null })),
-    "millilitres",
-  );
+Deno.test("per-100-ml labels stay in millilitres; serving labels need a printed mass", () => {
+  for (const reference_mass_grams of [null, 110]) {
+    const result = normalizeLabel(
+      label({ basis: "per_100ml", calories: 43, reference_mass_grams }),
+    );
+    equal(result.items[0].unit, "ml");
+    equal(result.items[0].grams, 100);
+    equal(result.totals.calories, 43); // No density conversion.
+    equal(result.nutrition_basis, "per_100g");
+  }
+  equal(normalizeLabel(label()).items[0].unit, "g");
   throws(
     () =>
       normalizeLabel(
@@ -170,11 +176,72 @@ Deno.test("volume and serving labels require printed mass, never inferred densit
       ),
     "serving weight",
   );
-  equal(
-    normalizeLabel(label({ basis: "per_100ml", reference_mass_grams: 110 }))
-      .totals.calories,
-    363.64,
+});
+Deno.test("drinks by volume return millilitre items scaled per 100 ml", () => {
+  const beer = meal({
+    name: "Beer",
+    amount: 330,
+    unit: "ml",
+    catalog_id: null,
+    fallback_per100g: { calories: 43, protein: 0.5, carbs: 3.6, fat: 0 },
+  });
+  const result = normalizeMeal(beer, [], "text");
+  equal(result.items[0].unit, "ml");
+  equal(result.items[0].grams, 330);
+  equal(result.totals.calories, 141.9);
+  equal(result.totals.carbs, 11.88);
+  assert(result.items[0].notes.includes("User-provided portion."));
+  assert(!result.items[0].notes.includes("reconciled")); // Alcohol energy stays.
+  // A per-100-g reference is not used for a millilitre amount.
+  const mismatch = normalizeMeal(
+    { ...beer, items: [{ ...beer.items[0], catalog_id: "usda:171477" }] },
+    foods as CatalogFood[],
+    "text",
   );
+  equal(mismatch.items[0].nutrition_source, "estimated");
+  equal(mismatch.totals.calories, 141.9);
+  throws(
+    () =>
+      normalizeMeal(
+        meal({ unit: "ml", fallback_per100g: null }),
+        foods as CatalogFood[],
+        "text",
+      ),
+    "incomplete nutrition",
+  );
+  throws(
+    () => normalizeMeal(meal({ unit: "oz" as "g" }), [], "text"),
+    "invalid portion",
+  );
+  // Explicit millilitre items keep their unit.
+  const explicit = normalizeMeal(beer, [], "text", [
+    { name: "Lager", grams: 500, unit: "ml" },
+  ]);
+  equal(explicit.items[0].unit, "ml");
+  equal(explicit.items[0].grams, 500);
+  equal(explicit.totals.calories, 215);
+});
+Deno.test("the text prompt treats volumes as measured amounts", () => {
+  const body = buildModelBody({
+    model: DEFAULT_MODEL,
+    isLabel: false,
+    text: "330 ml beer",
+    imageUrl: null,
+    items: [],
+    catalog: [],
+  });
+  const prompt = body.input[0].content[0].text as string;
+  assert(prompt.includes("1 pint = 568 ml"));
+  assert(
+    prompt.includes("A volume (ml, l, cl, pint, fl oz) is a measured amount"),
+  );
+  const schema = body.text.format.schema as unknown as {
+    properties: { items: { items: { properties: Record<string, unknown> } } };
+  };
+  equal(schema.properties.items.items.properties.unit, {
+    type: "string",
+    enum: ["g", "ml"],
+  });
 });
 Deno.test("unreadable, non-food, and malformed numeric values cannot become valid labels", () => {
   throws(
@@ -204,7 +271,7 @@ Deno.test("matched USDA nutrition overrides model guesses and scales to the supp
 });
 Deno.test("known weights preserve order, quantity guesses remain uncertain, and portions never trigger escalation", () => {
   const result = normalizeMeal(
-    meal({ grams: 200, portion_basis: "visual_estimate" }),
+    meal({ amount: 200, portion_basis: "visual_estimate" }),
     foods as CatalogFood[],
     "text",
     [{ name: "My chicken", grams: 100 }],
@@ -233,7 +300,7 @@ Deno.test("fallback estimates are marked and impossible portions or reference ID
     "unknown nutrition",
   );
   throws(
-    () => normalizeMeal(meal({ grams: 0 }), [], "text"),
+    () => normalizeMeal(meal({ amount: 0 }), [], "text"),
     "invalid portion",
   );
   throws(
@@ -258,6 +325,8 @@ Deno.test("saved serving foods need a valid gram conversion and missing nutrient
   equal(libraryFood({ ...row, serving_size: null }), null);
   equal(libraryFood({ ...row, protein_per_serving: null }), null);
   equal(libraryFood({ ...row, is_meal: true }), null);
+  equal(libraryFood(row)?.unit, "g");
+  equal(libraryFood({ ...row, amount_unit: "ml" })?.unit, "ml");
 });
 Deno.test("Luna and Sol use supported reasoning, strict schemas and explicit high image detail", () => {
   const body = buildModelBody({

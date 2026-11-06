@@ -2,10 +2,18 @@ import EZHAKit
 import PhotosUI
 import SwiftUI
 
-/// Manual food fields: name, unit type, serving, and macros per 100 g.
+/// Manual food fields: name, unit type, serving, and macros per 100 g (or 100 ml).
 struct FoodFormModel: Equatable {
+  /// The visible unit choice. Per 100 ml is `per100g` with `amountUnit` ml.
+  enum Basis: Hashable {
+    case per100g
+    case per100ml
+    case perServing
+  }
+
   var name = ""
   var unitType = FoodUnitType.per100g
+  var amountUnit = AmountUnit.g
   var servingGrams = ""
   var servingUnit = ""
   var macros = MacroFieldsModel()
@@ -15,6 +23,7 @@ struct FoodFormModel: Equatable {
   init(food: SavedFood) {
     name = food.name
     unitType = food.unitType
+    amountUnit = food.amountUnit
     servingGrams = food.servingSize.map { Macros.format($0, maxFractionDigits: 1) } ?? ""
     servingUnit = food.servingUnit ?? ""
     macros = MacroFieldsModel(values: Macros.resolvedPer100g(food))
@@ -24,7 +33,18 @@ struct FoodFormModel: Equatable {
     LibraryDrafts.manualDraft(
       .init(
         name: name, unitType: unitType, servingGrams: parseNumberInput(servingGrams),
-        servingUnit: servingUnit, per100g: macros.optionalValues))
+        servingUnit: servingUnit, amountUnit: amountUnit, per100g: macros.optionalValues))
+  }
+
+  var basis: Basis {
+    get { unitType == .perServing ? .perServing : amountUnit == .ml ? .per100ml : .per100g }
+    set {
+      switch newValue {
+      case .per100g: (unitType, amountUnit) = (.per100g, .g)
+      case .per100ml: (unitType, amountUnit) = (.per100g, .ml)
+      case .perServing: unitType = .perServing
+      }
+    }
   }
 }
 
@@ -35,28 +55,41 @@ struct FoodFormFields: View {
     Section {
       TextField("Name", text: $model.name)
         .textInputAutocapitalization(.sentences)
-      Picker("Unit", selection: $model.unitType) {
-        Text("Per 100 g").tag(FoodUnitType.per100g)
-        Text("Per serving").tag(FoodUnitType.perServing)
+      Picker("Unit", selection: $model.basis) {
+        Text("Per 100 g").tag(FoodFormModel.Basis.per100g)
+        Text("Per 100 ml").tag(FoodFormModel.Basis.per100ml)
+        Text("Per serving").tag(FoodFormModel.Basis.perServing)
       }
       .pickerStyle(.segmented)
+      .accessibilityIdentifier("foodUnitPicker")
       if model.unitType == .perServing {
         LabeledContent("Serving size") {
           HStack(spacing: 4) {
-            TextField("Grams", text: $model.servingGrams)
+            TextField("Amount", text: $model.servingGrams)
               .keyboardType(.decimalPad)
               .multilineTextAlignment(.trailing)
               .monospacedDigit()
-            Text("g").foregroundStyle(.secondary)
+              .accessibilityLabel("Serving size in \(model.amountUnit.spokenName)")
+              .accessibilityIdentifier("servingSizeField")
+            Picker("Serving size unit", selection: $model.amountUnit) {
+              Text("g").tag(AmountUnit.g)
+              Text("ml").tag(AmountUnit.ml)
+            }
+            .pickerStyle(.menu)
+            .labelsHidden()
+            .fixedSize()
+            .accessibilityIdentifier("servingUnitPicker")
           }
         }
         TextField("Serving unit (e.g. cup)", text: $model.servingUnit)
       }
     }
     Section {
-      MacroFields(model: $model.macros, basis: "per 100 grams")
+      MacroFields(
+        model: $model.macros,
+        basis: model.amountUnit == .ml ? "per 100 millilitres" : "per 100 grams")
     } header: {
-      Text("Nutrition per 100 g")
+      Text(model.amountUnit == .ml ? "Nutrition per 100 ml" : "Nutrition per 100 g")
     } footer: {
       if model.unitType == .perServing, case .success(let draft) = model.draft {
         let serving = draft.perServing
@@ -316,7 +349,7 @@ struct AddFoodSheet: View {
           .accessibilityLabel("Food photo")
         Toggle("Nutrition label", isOn: $photo.isLabel)
         if photo.isLabel {
-          LabeledContent("Grams eaten") {
+          LabeledContent(photo.labelUnit.amountEatenTitle) {
             TextField("Optional", text: $photo.labelGramsText)
               .keyboardType(.decimalPad)
               .multilineTextAlignment(.trailing)
@@ -346,7 +379,7 @@ struct AddFoodSheet: View {
         TextField("Name", text: $photo.name)
         MacroFields(model: $photo.display)
       } header: {
-        Text(photo.isLabel ? "Nutrition for the grams eaten" : "Nutrition")
+        Text(photo.isLabel ? "Nutrition for the amount eaten" : "Nutrition")
       }
     }
   }
@@ -364,7 +397,8 @@ struct AddFoodSheet: View {
           name: photo.name,
           display: photo.display.values == nil ? [] : photo.display.optionalValues,
           isLabelPhoto: photo.isLabel,
-          labelGrams: parseNumberInput(photo.labelGramsText))
+          labelGrams: parseNumberInput(photo.labelGramsText),
+          unit: photo.isLabel ? photo.labelUnit : .g)
       }
     switch result {
     case .failure(let error):
@@ -388,6 +422,9 @@ final class PhotoFoodModel {
   var isEstimating = false
   var errorMessage: String?
   private var uploadedPath: String?
+
+  /// A per-100-ml label is read in millilitres. Grams until a label is read.
+  var labelUnit: AmountUnit { estimate?.items.first?.unit ?? .g }
 
   func attach(_ raw: Data, isLabel: Bool) async {
     do {
@@ -424,7 +461,7 @@ final class PhotoFoodModel {
       }
       estimate = result
       if name.isEmpty { name = result.foodName ?? "" }
-      // Labels are per 100 g. Display them for the grams eaten when given.
+      // Labels are per 100 g (or 100 ml). Display them for the amount eaten when given.
       let shown =
         isLabel
         ? LogItemMath.scalePer100g(result.totals, grams: parseNumberInput(labelGramsText))

@@ -26,7 +26,9 @@ public struct Estimate: Codable, Sendable, Hashable {
 
   public struct Item: Codable, Sendable, Hashable {
     public var name: String
+    /// Amount in `unit`. Older backends send only grams.
     public var grams: Double
+    public var unit: AmountUnit
     public var calories: Double
     public var protein: Double
     public var carbs: Double
@@ -38,12 +40,13 @@ public struct Estimate: Codable, Sendable, Hashable {
     public var portionEstimated: Bool?
 
     public init(
-      name: String, grams: Double, macros: MacroTotals, confidence: Double? = nil,
-      notes: String? = nil, nutritionSource: String? = nil, nutritionSourceId: String? = nil,
-      portionEstimated: Bool? = nil
+      name: String, grams: Double, unit: AmountUnit = .g, macros: MacroTotals,
+      confidence: Double? = nil, notes: String? = nil, nutritionSource: String? = nil,
+      nutritionSourceId: String? = nil, portionEstimated: Bool? = nil
     ) {
       self.name = name
       self.grams = grams
+      self.unit = unit
       self.calories = macros.calories
       self.protein = macros.protein
       self.carbs = macros.carbs
@@ -60,10 +63,26 @@ public struct Estimate: Codable, Sendable, Hashable {
     }
 
     enum CodingKeys: String, CodingKey {
-      case name, grams, calories, protein, carbs, fat, confidence, notes
+      case name, grams, unit, calories, protein, carbs, fat, confidence, notes
       case nutritionSource = "nutrition_source"
       case nutritionSourceId = "nutrition_source_id"
       case portionEstimated = "portion_estimated"
+    }
+
+    public init(from decoder: any Decoder) throws {
+      let c = try decoder.container(keyedBy: CodingKeys.self)
+      name = try c.decode(String.self, forKey: .name)
+      grams = try c.decode(Double.self, forKey: .grams)
+      unit = try c.decodeIfPresent(AmountUnit.self, forKey: .unit) ?? .g
+      calories = try c.decode(Double.self, forKey: .calories)
+      protein = try c.decode(Double.self, forKey: .protein)
+      carbs = try c.decode(Double.self, forKey: .carbs)
+      fat = try c.decode(Double.self, forKey: .fat)
+      confidence = try c.decodeIfPresent(Double.self, forKey: .confidence)
+      notes = try c.decodeIfPresent(String.self, forKey: .notes)
+      nutritionSource = try c.decodeIfPresent(String.self, forKey: .nutritionSource)
+      nutritionSourceId = try c.decodeIfPresent(String.self, forKey: .nutritionSourceId)
+      portionEstimated = try c.decodeIfPresent(Bool.self, forKey: .portionEstimated)
     }
   }
 

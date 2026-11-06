@@ -1,7 +1,7 @@
 import EZHAKit
 import SwiftUI
 
-/// Log a saved food (grams) or meal (portions) to the selected day without AI.
+/// Log a saved food (g or ml) or meal (portions) to the selected day without AI.
 struct QuickLogSheet: View {
   var food: SavedFood
   @Environment(AppModel.self) private var appModel
@@ -56,11 +56,11 @@ struct QuickLogSheet: View {
                     ? "1" : Macros.format(LogItemMath.defaultGrams(current), maxFractionDigits: 1)
                 }
               },
-              unit: food.isMeal ? "portions" : "g",
+              unit: food.isMeal ? "portions" : current.amountUnit.label,
               step: food.isMeal ? 0.5 : LogItemMath.stepGrams,
               accessibilityName: food.isMeal
                 ? String(localized: "Portions of \(food.name)")
-                : String(localized: "Quantity of \(food.name) in grams"))
+                : String(localized: "Quantity of \(food.name) in \(current.amountUnit.spokenName)"))
           }
           VStack(alignment: .leading, spacing: 4) {
             KcalText(value: totals.calories).font(.title3.bold())
@@ -85,11 +85,9 @@ struct QuickLogSheet: View {
                 HStack {
                   Text(item.name)
                   Spacer()
-                  Text(
-                    "\(parseNumberInput(item.gramsText) ?? 0, format: .number.precision(.fractionLength(0...1))) g"
-                  )
-                  .foregroundStyle(.secondary)
-                  .monospacedDigit()
+                  Text(item.unit.format(parseNumberInput(item.gramsText) ?? 0))
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
                 }
               }
             }

@@ -6,17 +6,20 @@ public struct SavedFoodDraft: Codable, Sendable, Hashable {
   public var unitType: FoodUnitType
   public var servingSize: Double?
   public var servingUnit: String?
+  /// `ml`: per-100 values are per 100 ml and the serving size is in millilitres.
+  public var amountUnit: AmountUnit
   public var per100g: MacroTotals
   public var perServing: MacroTotals
 
   public init(
     name: String, unitType: FoodUnitType, servingSize: Double?, servingUnit: String?,
-    per100g: MacroTotals, perServing: MacroTotals
+    amountUnit: AmountUnit = .g, per100g: MacroTotals, perServing: MacroTotals
   ) {
     self.name = name
     self.unitType = unitType
     self.servingSize = servingSize
     self.servingUnit = servingUnit
+    self.amountUnit = amountUnit
     self.per100g = per100g
     self.perServing = perServing
   }
@@ -26,6 +29,7 @@ public struct SavedFoodDraft: Codable, Sendable, Hashable {
     case unitType = "unit_type"
     case servingSize = "serving_size"
     case servingUnit = "serving_unit"
+    case amountUnit = "amount_unit"
     case caloriesPer100g = "calories_per_100g"
     case proteinPer100g = "protein_per_100g"
     case carbsPer100g = "carbs_per_100g"
@@ -42,6 +46,7 @@ public struct SavedFoodDraft: Codable, Sendable, Hashable {
     unitType = try c.decode(FoodUnitType.self, forKey: .unitType)
     servingSize = try c.decodeIfPresent(Double.self, forKey: .servingSize)
     servingUnit = try c.decodeIfPresent(String.self, forKey: .servingUnit)
+    amountUnit = try c.decodeIfPresent(AmountUnit.self, forKey: .amountUnit) ?? .g
     per100g = MacroTotals(
       calories: try c.decode(Double.self, forKey: .caloriesPer100g),
       protein: try c.decode(Double.self, forKey: .proteinPer100g),
@@ -60,6 +65,7 @@ public struct SavedFoodDraft: Codable, Sendable, Hashable {
     try c.encode(unitType, forKey: .unitType)
     try c.encode(servingSize, forKey: .servingSize)
     try c.encode(servingUnit, forKey: .servingUnit)
+    try c.encode(amountUnit, forKey: .amountUnit)
     try c.encode(per100g.calories, forKey: .caloriesPer100g)
     try c.encode(per100g.protein, forKey: .proteinPer100g)
     try c.encode(per100g.carbs, forKey: .carbsPer100g)
@@ -80,6 +86,8 @@ public struct LibraryDraftError: Error, Equatable, Sendable, LocalizedError {
     message: "Please enter a food name to save to Library.")
   public static let invalidMacros = LibraryDraftError(message: "Please enter valid macro values.")
   public static let missingServing = LibraryDraftError(message: "Please enter grams per serving.")
+  public static let missingServingMl = LibraryDraftError(
+    message: "Please enter millilitres per serving.")
 }
 
 /// Port of `src/features/add-log/library-save-service.ts`.
@@ -91,17 +99,20 @@ public enum LibraryDrafts {
     public var unitType: FoodUnitType
     public var servingGrams: Double?
     public var servingUnit: String
-    /// Calories, protein, carbs, fat per 100 g. Nil when a field is not a number.
+    /// Unit of the per-100 values and the serving size.
+    public var amountUnit: AmountUnit
+    /// Calories, protein, carbs, fat per 100 g (or 100 ml). Nil when a field is not a number.
     public var per100g: [Double?]
 
     public init(
       name: String, unitType: FoodUnitType, servingGrams: Double?, servingUnit: String,
-      per100g: [Double?]
+      amountUnit: AmountUnit = .g, per100g: [Double?]
     ) {
       self.name = name
       self.unitType = unitType
       self.servingGrams = servingGrams
       self.servingUnit = servingUnit
+      self.amountUnit = amountUnit
       self.per100g = per100g
     }
   }
@@ -116,7 +127,9 @@ public enum LibraryDrafts {
     var servingUnit: String?
     var perServing = MacroTotals.zero
     if input.unitType == .perServing {
-      guard let grams = input.servingGrams, grams > 0 else { return .failure(.missingServing) }
+      guard let grams = input.servingGrams, grams > 0 else {
+        return .failure(input.amountUnit == .ml ? .missingServingMl : .missingServing)
+      }
       servingSize = grams
       servingUnit = input.servingUnit.trimmed.nonEmpty ?? defaultServingUnit
       perServing = per100.scaled(by: grams / 100)
@@ -124,12 +137,13 @@ public enum LibraryDrafts {
     return .success(
       SavedFoodDraft(
         name: name, unitType: input.unitType, servingSize: servingSize, servingUnit: servingUnit,
-        per100g: per100, perServing: perServing))
+        amountUnit: input.amountUnit, per100g: per100, perServing: perServing))
   }
 
-  /// Photo food: display macros. A label with grams eaten converts back to per 100 g.
+  /// Photo food: display macros. A label with an amount eaten converts back to per 100 g (or ml).
   public static func photoDraft(
-    name: String, display: [Double?], isLabelPhoto: Bool, labelGrams: Double?
+    name: String, display: [Double?], isLabelPhoto: Bool, labelGrams: Double?,
+    unit: AmountUnit = .g
   ) -> Result<SavedFoodDraft, LibraryDraftError> {
     let name = name.trimmed
     guard !name.isEmpty else { return .failure(.missingPhotoName) }
@@ -138,8 +152,8 @@ public enum LibraryDrafts {
       isLabelPhoto ? LogItemMath.per100gFromDisplay(values, grams: labelGrams) : values
     return .success(
       SavedFoodDraft(
-        name: name, unitType: .per100g, servingSize: nil, servingUnit: nil, per100g: per100,
-        perServing: .zero))
+        name: name, unitType: .per100g, servingSize: nil, servingUnit: nil, amountUnit: unit,
+        per100g: per100, perServing: .zero))
   }
 
   /// Exact case-insensitive name match among non-meal foods.

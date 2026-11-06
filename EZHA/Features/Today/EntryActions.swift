@@ -46,7 +46,7 @@ enum EntryActions {
   /// Saves the entry's items as a library meal.
   static func saveAsMeal(_ entry: DayEntry, appModel: AppModel) {
     let ingredients = entry.items.map {
-      SavedMealIngredient(name: $0.name, grams: $0.grams, macros: $0.macros)
+      SavedMealIngredient(name: $0.name, grams: $0.grams, unit: $0.unit, macros: $0.macros)
     }
     Task {
       do {
