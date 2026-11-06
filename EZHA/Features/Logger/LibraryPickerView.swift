@@ -8,7 +8,6 @@ struct LibraryPickerView: View {
   var onDescribe: (_ text: String) -> Void
   @Environment(AppModel.self) private var appModel
   @Environment(\.dismiss) private var dismiss
-  @Environment(\.dynamicTypeSize) private var dynamicTypeSize
   @State private var search = ""
   @State private var isSearchPresented = false
   @State private var filter = LibraryFilter.all
@@ -16,9 +15,6 @@ struct LibraryPickerView: View {
   @State private var loadingId: UUID?
   @State private var errorMessage: String?
   @State private var isSelectionPresented = false
-  /// Height of the bottom actions: the search bar's height, scaled with text, so both buttons
-  /// stay the same size and share the search bar's corner radius.
-  @ScaledMetric(relativeTo: .headline) private var actionHeight: CGFloat = 46
 
   private var store: LibraryStore { appModel.libraryStore }
   private var foods: [SavedFood] { filter.apply(to: store.foods, search: search) }
@@ -79,24 +75,30 @@ struct LibraryPickerView: View {
     .toolbar {
       DefaultToolbarItem(kind: .search, placement: .bottomBar)
     }
-    // Floating glass actions: the list scrolls under them with the system edge effect.
+    // Floating glass bar: the list scrolls under it with the system edge effect and gets a
+    // bottom content inset, so the last row scrolls clear of it.
     .safeAreaBar(edge: .bottom) {
-      if !items.isEmpty {
-        GlassEffectContainer(spacing: 12) {
-          HStack(spacing: 12) {
-            selectionButton
-            addButton
+      if !selection.isEmpty {
+        LibrarySelectionBar(
+          count: selection.count, calories: LogItemMath.totals(items).calories,
+          onReview: { isSelectionPresented = true },
+          onAdd: {
+            onAdd(items, selection.first?.food.name, selection.filter(\.food.isMeal).map(\.food.id))
+            dismiss()
           }
-        }
+        )
+        // Bars stop growing at xxxLarge, like system toolbars; long press shows the large
+        // content viewer.
+        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
         // Same side inset as the search bar in the bottom toolbar below.
         .padding(.horizontal, 28)
         .padding(.bottom, 8)
         .transition(.move(edge: .bottom).combined(with: .opacity))
       }
     }
-    .animation(.smooth(duration: 0.3), value: items.isEmpty)
-    .navigationDestination(isPresented: $isSelectionPresented) {
-      Group {
+    .animation(.smooth(duration: 0.3), value: selection.isEmpty)
+    .sheet(isPresented: $isSelectionPresented) {
+      NavigationStack {
         List {
           ForEach(selection, id: \.food.id) { selected in
             VStack(alignment: .leading, spacing: 8) {
@@ -122,53 +124,9 @@ struct LibraryPickerView: View {
           }
         }
       }
+      .presentationDetents([.medium, .large])
     }
     .task { await store.load() }
-  }
-
-  private var selectionButton: some View {
-    Button {
-      isSelectionPresented = true
-    } label: {
-      Image(systemName: "list.bullet")
-        .font(.headline)
-        .foregroundStyle(Color.accentColor)
-        .frame(width: actionHeight, height: actionHeight)
-        .contentShape(.circle)
-        .glassEffect(.regular.interactive(), in: .circle)
-    }
-    .buttonStyle(.plain)
-    .accessibilityLabel("Review selected foods")
-    .accessibilityIdentifier("reviewSelection")
-  }
-
-  private var addButton: some View {
-    Button {
-      onAdd(items, selection.first?.food.name, selection.filter(\.food.isMeal).map(\.food.id))
-      dismiss()
-    } label: {
-      Group {
-        if dynamicTypeSize.isAccessibilitySize {
-          Text("Add ^[\(items.count) item](inflect: true)")
-        } else {
-          Text(
-            "Add ^[\(items.count) item](inflect: true) · \(LogItemMath.totals(items).calories, format: .number.precision(.fractionLength(0))) kcal"
-          )
-        }
-      }
-      .font(.headline)
-      .monospacedDigit()
-      .foregroundStyle(.white)
-      .padding(.horizontal)
-      .frame(maxWidth: .infinity, minHeight: actionHeight)
-      .contentShape(.capsule)
-      .glassEffect(.regular.tint(.accentColor).interactive(), in: .capsule)
-    }
-    .buttonStyle(.plain)
-    .accessibilityLabel(
-      "Add ^[\(items.count) item](inflect: true), \(LogItemMath.totals(items).calories, format: .number.precision(.fractionLength(0))) kcal"
-    )
-    .accessibilityIdentifier("addSelected")
   }
 
   private func button(_ food: SavedFood) -> some View {
@@ -235,5 +193,72 @@ struct LibraryPickerView: View {
     } catch {
       errorMessage = OnlineError.message(for: error)
     }
+  }
+}
+
+/// One glass capsule: the selection summary (opens the review) and the Add action.
+/// Labels stay on one line: each picks the longest version that fits.
+private struct LibrarySelectionBar: View {
+  var count: Int
+  var calories: Double
+  var onReview: () -> Void
+  var onAdd: () -> Void
+  /// The search bar's height, scaled with text (capped by the caller), so the bar matches it.
+  @ScaledMetric(relativeTo: .body) private var height: CGFloat = 46
+
+  private var kcal: String {
+    calories.formatted(.number.precision(.fractionLength(0)))
+  }
+
+  var body: some View {
+    HStack(spacing: 0) {
+      Button(action: onReview) {
+        HStack(spacing: 8) {
+          ViewThatFits(in: .horizontal) {
+            HStack(spacing: 4) {
+              Text("\(count) selected").fontWeight(.semibold)
+              Text("· \(kcal) kcal").foregroundStyle(.secondary)
+            }
+            Text("\(count) selected").fontWeight(.semibold)
+            Text(count, format: .number).fontWeight(.semibold)
+          }
+          .lineLimit(1)
+          .monospacedDigit()
+          .frame(maxWidth: .infinity, alignment: .leading)
+          Image(systemName: "chevron.up")
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(.secondary)
+        }
+        .padding(.leading, 18)
+        .padding(.trailing, 8)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .contentShape(.rect)
+      }
+      .buttonStyle(.plain)
+      .accessibilityLabel("\(count) selected, \(kcal) kcal")
+      .accessibilityHint("Shows selected items")
+      .accessibilityShowsLargeContentViewer()
+      .accessibilityIdentifier("reviewSelection")
+
+      Button(action: onAdd) {
+        Text("Add")
+          .font(.headline)
+          .lineLimit(1)
+          .foregroundStyle(.white)
+          .padding(.horizontal, 22)
+          .frame(maxHeight: .infinity)
+          .background(Color.accentColor, in: .capsule)
+          // The tap target reaches the bar's edge; the visible capsule sits inside it.
+          .padding(5)
+          .contentShape(.rect)
+      }
+      .buttonStyle(.plain)
+      .fixedSize(horizontal: true, vertical: false)
+      .accessibilityLabel("Add ^[\(count) item](inflect: true)")
+      .accessibilityShowsLargeContentViewer()
+      .accessibilityIdentifier("addSelected")
+    }
+    .frame(height: height)
+    .glassEffect(.regular.interactive(), in: .capsule)
   }
 }
