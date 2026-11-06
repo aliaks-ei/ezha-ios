@@ -786,7 +786,7 @@ private struct ImpactBar: View {
           Capsule()
             .fill(Color.primary)
             .frame(width: 2, height: 14)
-            .offset(x: width * goal / scale + 2 * max(gaps - 1, 0))
+            .offset(x: width * CGFloat(goal / scale) + 2 * max(gaps - 1, 0))
         }
       }
     }
