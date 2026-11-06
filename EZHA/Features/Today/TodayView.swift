@@ -21,10 +21,11 @@ struct TodayView: View {
             .background(Color.canvas)
             .ignoresSafeArea()
         }
+        // The bar shows `dayTitle` instead; the title still names the screen for accessibility.
         .navigationTitle(date.titleLabel(today: appModel.today))
-        // Large title in the same row as the buttons: saves the separate title row.
-        .toolbarTitleDisplayMode(.inlineLarge)
+        .toolbarTitleDisplayMode(.inline)
         .toolbar {
+          ToolbarItem(placement: .principal) { dayTitle(date) }
           if date != appModel.today {
             ToolbarItem(placement: .topBarTrailing) {
               Button("Today") { goTo(appModel.today) }
@@ -37,6 +38,41 @@ struct TodayView: View {
         }
         .sensoryFeedback(.selection, trigger: date)
     }
+  }
+
+  /// "‹  Sat, Oct 4  ›". Buttons, not a swipe, so row swipe actions do not change the day.
+  private func dayTitle(_ date: DateKey) -> some View {
+    HStack(spacing: 4) {
+      dayButton("Previous day", systemImage: "chevron.left", id: "previousDay") {
+        goTo(date.adding(days: -1))
+      }
+      Text(date.titleLabel(today: appModel.today))
+        .font(.headline)
+        .lineLimit(1)
+        .minimumScaleFactor(0.7)
+        .accessibilityAddTraits(.isHeader)
+        .accessibilityIdentifier("dayTitle")
+      dayButton("Next day", systemImage: "chevron.right", id: "nextDay") {
+        goTo(date.adding(days: 1))
+      }
+      .disabled(date >= appModel.today)
+    }
+    .fontWeight(.semibold)
+    // The bar has a fixed height: larger sizes would clip.
+    .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+  }
+
+  private func dayButton(
+    _ title: LocalizedStringKey, systemImage: String, id: String, action: @escaping () -> Void
+  ) -> some View {
+    Button(action: action) {
+      Label(title, systemImage: systemImage)
+        .labelStyle(.iconOnly)
+        .frame(minWidth: 44, minHeight: 44)
+        .contentShape(.rect)
+    }
+    .buttonStyle(.borderless)
+    .accessibilityIdentifier(id)
   }
 
   private var calendar: some View {
