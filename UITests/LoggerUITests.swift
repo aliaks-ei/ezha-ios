@@ -29,7 +29,9 @@ final class LoggerUITests: HarnessTestCase {
     XCTAssertEqual(per100g("calories").value as? String, "165")
     XCTAssertEqual(per100g("protein").value as? String, "31")
     XCTAssertTrue(element("reviewTotal").label.contains("165 kcal"))
-    XCTAssertTrue(app.staticTexts["Calories after this meal"].exists)
+    XCTAssertEqual(element("dayRemaining").label, "Calories after this meal")
+    let calories = element("dayRemaining").value as? String ?? ""
+    XCTAssertTrue(calories.hasPrefix("805 of ") && calories.hasSuffix(" left"), calories)
     XCTAssertTrue(app.buttons["loggerPrimary"].isHittable)
     XCTAssertFalse(app.textFields["mealText"].exists)
     capture("review-light")
@@ -37,6 +39,56 @@ final class LoggerUITests: HarnessTestCase {
     capture("review-dark")
     launch(large: true)
     capture("review-large-text")
+  }
+
+  /// PET-111: over a target shows "over" with an icon, and only over macros stay when compact.
+  func testDayImpactOverTarget() {
+    launch("reviewOver")
+    let calories = element("dayRemaining")
+    XCTAssertTrue(calories.waitForExistence(timeout: 5))
+    XCTAssertEqual(calories.value as? String, "805 of 700 kilocalories, 105 over")
+    let macros = element("dayMacros").value as? String ?? ""
+    XCTAssertTrue(macros.hasPrefix("Protein 11 grams over."), macros)
+    XCTAssertTrue(macros.contains("Carbs 70 of 120 grams."), macros)
+    capture("review-over-light")
+    let grams = app.textFields.matching(NSPredicate(format: "label BEGINSWITH 'Portion of'"))
+      .firstMatch
+    XCTAssertTrue(grams.waitForExistence(timeout: 5))
+    grams.tap()
+    XCTAssertTrue(app.buttons["Hide keyboard"].waitForExistence(timeout: 5))
+    let compact = expectation(
+      for: NSPredicate(format: "value == %@", "Protein 11 grams over."),
+      evaluatedWith: element("dayMacros"))
+    wait(for: [compact], timeout: 5)
+    XCTAssertTrue(app.buttons["loggerPrimary"].isHittable)
+    capture("review-over-keyboard")
+    launch("reviewOver", dark: true)
+    capture("review-over-dark")
+    launch("reviewOver", large: true)
+    XCTAssertTrue(app.buttons["loggerPrimary"].isHittable)
+    capture("review-over-large-text")
+  }
+
+  /// PET-111: with no target, the day's totals show without a bar or "left".
+  func testDayImpactNoTarget() {
+    launch("reviewNoTarget")
+    let calories = element("dayRemaining")
+    XCTAssertTrue(calories.waitForExistence(timeout: 5))
+    XCTAssertEqual(
+      calories.value as? String, "805 kilocalories today, 640 before this meal")
+    XCTAssertEqual(
+      element("dayMacros").value as? String, "Protein 71 grams. Carbs 70 grams. Fat 24 grams.")
+    capture("review-no-target-light")
+    launch("reviewNoTarget", dark: true)
+    capture("review-no-target-dark")
+    launch("reviewNoTarget", large: true)
+    capture("review-no-target-large-text")
+    launch("multiple")
+    capture("review-multiple-light")
+    launch("multiple", dark: true)
+    capture("review-multiple-dark")
+    launch("multiple", large: true)
+    capture("review-multiple-large-text")
   }
 
   /// PET-110: the queued entry is already in the day while the sheet saves; count it once.
@@ -152,6 +204,8 @@ final class LoggerUITests: HarnessTestCase {
 
   func testAddFoodReturnsToEntryAndBack() {
     launch("multiple")
+    // Three foods fill the sheet: "Add food" is below the day preview until the list scrolls.
+    app.swipeUp()
     app.buttons["addFood"].tap()
     XCTAssertTrue(app.buttons["attachPhotos"].waitForExistence(timeout: 5))
     XCTAssertEqual(app.buttons["loggerPrimary"].label, "Review meal")

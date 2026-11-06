@@ -410,42 +410,30 @@ private struct LoggerContent: View {
   private var bottomBar: some View {
     VStack(spacing: 8) {
       if !isEntryVisible {
-        let day = appModel.dayStore.merged(model.date).flatMap { $0.goals.calories > 0 ? $0 : nil }
+        let day = appModel.dayStore.merged(model.date)
         // While "Log meal" saves, the day already holds this entry; count it once.
         let eaten = day?.totals(excluding: model.state.entryId) ?? .zero
+        let isStacked = dynamicTypeSize.isAccessibilitySize
         VStack(alignment: .leading, spacing: 8) {
-          let stacked = dynamicTypeSize.isAccessibilitySize
-          (stacked
-            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
-            : AnyLayout(HStackLayout(alignment: .firstTextBaseline))) {
-              HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text(
-                  model.hasInvalidEdits
-                    ? "Last valid total"
-                    : stacked ? "Total" : model.hasAIItems ? "Estimated total" : "Meal total"
-                )
-                .foregroundStyle(.secondary)
-                KcalText(value: model.totals.calories).font(.headline)
-              }
-              .accessibilityElement(children: .combine)
-              .accessibilityIdentifier("reviewTotal")
-              if !stacked { Spacer(minLength: 8) }
-              if let day {
-                let after = eaten.calories + model.totals.calories
-                let text = DayImpact.remainingText(day.goals.calories, after, unit: "kcal")
-                DayImpact.remaining(day.goals.calories, after, unit: "kcal")
-                  .font(.subheadline.weight(.semibold))
-                  .accessibilityLabel("Calories after this meal")
-                  .accessibilityValue(text)
-                  .accessibilityIdentifier("dayRemaining")
-              }
-            }
+          HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Text(
+              model.hasInvalidEdits
+                ? "Last valid total"
+                : isStacked ? "Total" : model.hasAIItems ? "Estimated total" : "Meal total"
+            )
+            .foregroundStyle(.secondary)
+            KcalText(value: model.totals.calories).font(.headline)
+          }
+          .accessibilityElement(children: .combine)
+          .accessibilityIdentifier("reviewTotal")
           if let day {
             DayImpact(
               goals: day.goals, eaten: eaten, meal: model.totals,
-              isCompact: isShortSheet || isKeyboardVisible || dynamicTypeSize.isAccessibilitySize)
+              isCompact: isShortSheet || isKeyboardVisible || isStacked,
+              isStacked: isStacked)
           }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
       }
       if model.hasInvalidEdits {
         Text("Correct the highlighted values before logging.")
@@ -578,83 +566,192 @@ private struct LoggerContent: View {
   }
 }
 
-/// The day's balance after this meal: a calorie bar, then protein, carbs and fat.
+/// The day after this meal (PET-111): a calorie bar with this meal as its own segment, the
+/// calories before → after against the target, and macro chips. Over a target always shows an
+/// icon and the word "over", never color alone. With no target, only the day's totals show.
 private struct DayImpact: View {
   var goals: MacroTotals
   var eaten: MacroTotals
   var meal: MacroTotals
+  /// Keyboard up, short sheet or accessibility text: no "before →", and only macros that go over.
   var isCompact: Bool
+  /// Accessibility text sizes: no bar, and the calorie line stacks.
+  var isStacked: Bool
+
+  private var after: MacroTotals { eaten + meal }
+  private var hasTarget: Bool { goals.calories > 0 }
+  /// Rounded, so the text never says "0 over".
+  private var caloriesLeft: Double { (goals.calories - after.calories).rounded() }
 
   var body: some View {
-    Group {
-      if isCompact {
-        let over = macros.filter { $0.goal > 0 && $0.eaten + $0.meal > $0.goal }
-        if !over.isEmpty {
-          Text(
-            over.map { "\($0.title) \(Self.format($0.eaten + $0.meal - $0.goal)) g over" }
-              .joined(separator: " · ")
-          )
-          .font(.footnote)
-          .foregroundStyle(.secondary)
-          .frame(maxWidth: .infinity, alignment: .trailing)
-        }
-      } else {
-        VStack(spacing: 10) {
-          ImpactBar(
-            goal: goals.calories, eaten: eaten.calories, meal: meal.calories, color: .brandPrimary)
-          HStack(alignment: .top, spacing: 16) {
-            ForEach(macros, id: \.title) { macro in
-              VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 4) {
-                  Text(macro.title).foregroundStyle(.secondary).lineLimit(1)
-                  Spacer(minLength: 0)
-                  Self.remaining(macro.goal, macro.eaten + macro.meal, unit: "g")
-                    .fontWeight(.semibold)
-                    .layoutPriority(1)
-                }
-                ImpactBar(
-                  goal: macro.goal, eaten: macro.eaten, meal: macro.meal, color: macro.color)
-              }
-              .accessibilityElement(children: .ignore)
-              .accessibilityLabel(macro.title)
-              .accessibilityValue(
-                Self.remainingText(macro.goal, macro.eaten + macro.meal, unit: "grams"))
-            }
-          }
-          .font(.caption)
-        }
+    VStack(alignment: .leading, spacing: 8) {
+      if hasTarget && !isStacked {
+        ImpactBar(
+          goal: goals.calories, eaten: eaten.calories, meal: meal.calories, color: .brandPrimary)
       }
+      calorieLine
+      macroChips
     }
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .accessibilityElement(children: .contain)
     .accessibilityIdentifier("dayImpact")
   }
 
-  private var macros: [(title: String, goal: Double, eaten: Double, meal: Double, color: Color)] {
+  private var calorieLine: some View {
+    let layout =
+      isStacked
+      ? AnyLayout(VStackLayout(alignment: .leading, spacing: 2))
+      : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: 8))
+    return layout {
+      progressText
+      if hasTarget {
+        if !isStacked { Spacer(minLength: 0) }
+        balanceText.layoutPriority(1)
+      }
+    }
+    .font(.subheadline)
+    .fontDesign(.rounded)
+    .monospacedDigit()
+    .accessibilityElement(children: .ignore)
+    .accessibilityLabel("Calories after this meal")
+    .accessibilityValue(calorieValue)
+    .accessibilityIdentifier("dayRemaining")
+  }
+
+  /// "1,240 → 1,610 of 2,000 kcal", or "Today 1,240 → 1,610 kcal" with no target.
+  private var progressText: Text {
+    let before = Text("\(Self.format(eaten.calories)) →").foregroundStyle(.secondary)
+    let total = Text(Self.format(after.calories)).fontWeight(.semibold)
+    guard hasTarget else {
+      let today = Text("Today").foregroundStyle(.secondary)
+      let unit = Text("kcal").foregroundStyle(.secondary)
+      return Text("\(today) \(before) \(total) \(unit)")
+    }
+    let goal = Text("of \(Self.format(goals.calories)) kcal").foregroundStyle(.secondary)
+    return isCompact ? Text("\(total) \(goal)") : Text("\(before) \(total) \(goal)")
+  }
+
+  @ViewBuilder private var balanceText: some View {
+    if caloriesLeft < 0 {
+      Self.overText("\(Self.format(-caloriesLeft)) over")
+    } else {
+      Text("\(Text(Self.format(caloriesLeft)).fontWeight(.semibold)) left")
+    }
+  }
+
+  private var calorieValue: String {
+    guard hasTarget else {
+      return String(
+        localized:
+          "\(Self.format(after.calories)) kilocalories today, \(Self.format(eaten.calories)) before this meal"
+      )
+    }
+    let balance =
+      caloriesLeft < 0
+      ? String(localized: "\(Self.format(-caloriesLeft)) over")
+      : String(localized: "\(Self.format(caloriesLeft)) left")
+    return String(
+      localized:
+        "\(Self.format(after.calories)) of \(Self.format(goals.calories)) kilocalories, \(balance)"
+    )
+  }
+
+  @ViewBuilder private var macroChips: some View {
+    let shown = isCompact ? macros.filter(\.isOver) : macros
+    if !shown.isEmpty {
+      FlowLayout(spacing: 6) {
+        ForEach(shown) { MacroChip(macro: $0) }
+      }
+      .accessibilityElement(children: .ignore)
+      .accessibilityLabel("Macros after this meal")
+      .accessibilityValue(macroValue(shown))
+      .accessibilityIdentifier("dayMacros")
+    }
+  }
+
+  /// Over macros first, so VoiceOver reads what needs attention before the rest.
+  private func macroValue(_ shown: [ImpactMacro]) -> String {
+    let over = shown.filter(\.isOver).map {
+      String(localized: "\($0.title) \(Self.format($0.over)) grams over.")
+    }
+    let rest = shown.filter { !$0.isOver }.map {
+      $0.goal > 0
+        ? String(
+          localized: "\($0.title) \(Self.format($0.total)) of \(Self.format($0.goal)) grams.")
+        : String(localized: "\($0.title) \(Self.format($0.total)) grams.")
+    }
+    return (over + rest).joined(separator: " ")
+  }
+
+  private var macros: [ImpactMacro] {
     [
-      (String(localized: "Protein"), goals.protein, eaten.protein, meal.protein, .brandSecondary),
-      (String(localized: "Carbs"), goals.carbs, eaten.carbs, meal.carbs, .brandAccent),
-      (String(localized: "Fat"), goals.fat, eaten.fat, meal.fat, .brandPrimary),
+      ImpactMacro(
+        title: String(localized: "Protein"), goal: goals.protein, eaten: eaten.protein,
+        meal: meal.protein),
+      ImpactMacro(
+        title: String(localized: "Carbs"), goal: goals.carbs, eaten: eaten.carbs,
+        meal: meal.carbs),
+      ImpactMacro(
+        title: String(localized: "Fat"), goal: goals.fat, eaten: eaten.fat, meal: meal.fat),
     ]
   }
 
-  static func remaining(_ goal: Double, _ total: Double, unit: String) -> some View {
-    Text(remainingText(goal, total, unit: unit))
-      .fontDesign(.rounded)
-      .monospacedDigit()
-      .foregroundStyle(Color.primary)
+  static func overText(_ text: String) -> Text {
+    Text("\(Image(systemName: "exclamationmark.triangle.fill")) \(text)")
+      .fontWeight(.semibold)
+      .foregroundStyle(Color.danger)
   }
 
-  static func remainingText(_ goal: Double, _ total: Double, unit: String) -> String {
-    total > goal
-      ? String(localized: "\(format(total - goal)) \(unit) over")
-      : String(localized: "\(format(goal - total)) \(unit) left")
-  }
-
-  private static func format(_ value: Double) -> String {
+  static func format(_ value: Double) -> String {
     value.formatted(.number.precision(.fractionLength(0)))
   }
 }
 
-/// Eaten so far (solid) and this meal (light) on the day's track. Over the goal, the meal part is red.
+private struct ImpactMacro: Identifiable {
+  var title: String
+  var goal: Double
+  var eaten: Double
+  var meal: Double
+  var id: String { title }
+  var total: Double { eaten + meal }
+  /// Rounded grams over the goal; 0 with no goal.
+  var over: Double { goal > 0 ? max(0, (total - goal).rounded()) : 0 }
+  var isOver: Bool { over > 0 }
+}
+
+/// "Protein 71/140 g", or an outlined "⚠ Protein 11 g over".
+private struct MacroChip: View {
+  var macro: ImpactMacro
+
+  var body: some View {
+    Group {
+      if macro.isOver {
+        DayImpact.overText("\(macro.title) \(DayImpact.format(macro.over)) g over")
+          .padding(.horizontal, 8)
+          .padding(.vertical, 4)
+          .overlay(Capsule().strokeBorder(Color.danger, lineWidth: 1.5))
+      } else {
+        let total = Text(DayImpact.format(macro.total)).fontWeight(.semibold)
+        Text("\(macro.title) \(total)\(goalText)")
+          .padding(.horizontal, 8)
+          .padding(.vertical, 4)
+          .background(Color.track.opacity(0.5), in: .capsule)
+      }
+    }
+    .font(.caption)
+    .fontDesign(.rounded)
+    .monospacedDigit()
+  }
+
+  private var goalText: Text {
+    macro.goal > 0
+      ? Text("/\(DayImpact.format(macro.goal)) g").foregroundStyle(.secondary)
+      : Text(" g").foregroundStyle(.secondary)
+  }
+}
+
+/// Eaten so far (solid), this meal (striped) and the part over the goal (striped danger color,
+/// after a goal mark). The bar scales to the larger of the goal and the day after this meal.
 private struct ImpactBar: View {
   var goal: Double
   var eaten: Double
@@ -663,18 +760,109 @@ private struct ImpactBar: View {
 
   var body: some View {
     GeometryReader { geometry in
-      let scale = max(goal, eaten + meal, 1)
+      let total = eaten + meal
+      let scale = max(goal, total, 1)
+      let eatenIn = min(eaten, goal)
+      let mealIn = max(0, min(total, goal) - eaten)
+      let over = max(0, total - goal)
+      // 2 pt gaps between the parts come out of the width, so the parts stay on the track.
+      let gaps = CGFloat([eatenIn, mealIn, over].filter { $0 > 0 }.count - 1)
+      let width = max(0, geometry.size.width - 2 * max(gaps, 0))
       HStack(spacing: 0) {
-        Rectangle().fill(color).frame(width: geometry.size.width * eaten / scale)
-        Rectangle()
-          .fill(color.opacity(0.4))
-          .frame(width: geometry.size.width * meal / scale)
+        Rectangle().fill(color).frame(width: width * eatenIn / scale)
+        Stripes(color: color)
+          .frame(width: width * mealIn / scale)
+          .padding(.leading, eatenIn > 0 && mealIn > 0 ? 2 : 0)
+        Stripes(color: .danger)
+          .frame(width: width * over / scale)
+          .padding(.leading, over > 0 ? 2 : 0)
       }
       .frame(maxWidth: .infinity, alignment: .leading)
       .background(Color.track)
       .clipShape(.capsule)
+      .overlay(alignment: .leading) {
+        if over > 0 {
+          // The goal mark sits in the gap before the over part and reaches past the bar.
+          Capsule()
+            .fill(Color.primary)
+            .frame(width: 2, height: 14)
+            .offset(x: width * goal / scale + 2 * max(gaps - 1, 0))
+        }
+      }
     }
-    .frame(height: 6)
+    .frame(height: 8)
     .accessibilityHidden(true)
+  }
+}
+
+/// Diagonal stripes on a light fill of the color: this meal, or the part over the goal.
+private struct Stripes: View {
+  var color: Color
+
+  var body: some View {
+    Canvas { context, size in
+      context.fill(Path(CGRect(origin: .zero, size: size)), with: .color(color.opacity(0.4)))
+      var path = Path()
+      var x = -size.height
+      while x < size.width {
+        path.move(to: CGPoint(x: x, y: size.height))
+        path.addLine(to: CGPoint(x: x + size.height, y: 0))
+        x += 5
+      }
+      context.stroke(path, with: .color(color), lineWidth: 2.5)
+    }
+    .frame(height: 8)
+  }
+}
+
+/// Places chips in rows and wraps them when a row is full.
+private struct FlowLayout: Layout {
+  var spacing: CGFloat
+
+  func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+    let rows = rows(width: proposal.width ?? .infinity, subviews: subviews)
+    let width = rows.map(\.width).max() ?? 0
+    let height = rows.map(\.height).reduce(0, +) + spacing * CGFloat(max(rows.count - 1, 0))
+    let proposed = proposal.width.flatMap { $0.isFinite ? $0 : nil }
+    return CGSize(width: proposed ?? width, height: height)
+  }
+
+  func placeSubviews(
+    in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()
+  ) {
+    var y = bounds.minY
+    for row in rows(width: bounds.width, subviews: subviews) {
+      var x = bounds.minX
+      for index in row.indices {
+        let size = subviews[index].sizeThatFits(ProposedViewSize(width: bounds.width, height: nil))
+        subviews[index].place(
+          at: CGPoint(x: x, y: y), proposal: ProposedViewSize(width: size.width, height: nil))
+        x += size.width + spacing
+      }
+      y += row.height + spacing
+    }
+  }
+
+  private struct Row {
+    var indices: [Int] = []
+    var width: CGFloat = 0
+    var height: CGFloat = 0
+  }
+
+  private func rows(width: CGFloat, subviews: Subviews) -> [Row] {
+    var rows: [Row] = []
+    var row = Row()
+    for index in subviews.indices {
+      let size = subviews[index].sizeThatFits(ProposedViewSize(width: width, height: nil))
+      if !row.indices.isEmpty && row.width + spacing + size.width > width {
+        rows.append(row)
+        row = Row()
+      }
+      row.width += (row.indices.isEmpty ? 0 : spacing) + size.width
+      row.height = max(row.height, size.height)
+      row.indices.append(index)
+    }
+    if !row.indices.isEmpty { rows.append(row) }
+    return rows
   }
 }
