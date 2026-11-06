@@ -59,41 +59,22 @@ struct LoggerReviewItem: View {
   var body: some View {
     let macros = model.macros(for: item)
     VStack(alignment: .leading, spacing: 8) {
-      let headingLayout =
-        dynamicTypeSize.isAccessibilitySize
-        ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
-        : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: 12))
-      headingLayout {
-        Text(item.loggerDisplayName).font(.headline)
-          .frame(maxWidth: .infinity, alignment: .leading)
-        if model.state.items.count > 1 { KcalText(value: macros.calories).font(.headline) }
-      }
-      Button(action: onToggle) {
-        HStack(spacing: 8) {
-          Text("Nutrition details")
-          Image(systemName: "chevron.down")
-            .font(.caption.weight(.semibold))
-            .rotationEffect(.degrees(isExpanded ? 180 : 0))
-            .accessibilityHidden(true)
-        }
-        .font(.subheadline)
-        .frame(minHeight: 44)
-        .contentShape(.rect)
-      }
-      .buttonStyle(.plain)
-      .accessibilityIdentifier("foodRow\(index)")
-      .accessibilityLabel("Nutrition details for \(item.loggerDisplayName)")
-      .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
-
+      // One row: the name toggles Nutrition details, the portion control is on the trailing side.
+      // At accessibility sizes the control moves under the name.
       let stacked = dynamicTypeSize.isAccessibilitySize
-      (stacked ? AnyLayout(VStackLayout(alignment: .leading)) : AnyLayout(HStackLayout())) {
-        Text("Portion")
-        if !stacked { Spacer() }
+      let rowLayout =
+        stacked
+        ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
+        : AnyLayout(HStackLayout(alignment: .top, spacing: 8))
+      rowLayout {
+        nameToggle(macros)
         GramsField(
           text: Binding(get: { item.gramsText }, set: { model.setGrams(item.id, $0) }),
           onStep: step, onFocusLost: commitGrams, unit: item.unit.label,
           accessibilityName: String(
-            localized: "Portion of \(item.loggerDisplayName) in \(item.unit.spokenName)"))
+            localized: "Portion of \(item.loggerDisplayName) in \(item.unit.spokenName)")
+        )
+        .fixedSize()
       }
 
       if let error = NumericInput.portionError(item.gramsText, unit: item.unit) {
@@ -105,7 +86,7 @@ struct LoggerReviewItem: View {
       if (model.state.nutritionEdits?[item.id] ?? [:]).values.contains(where: {
         NumericInput.nutritionError($0) != nil
       }) && !isExpanded {
-        Text("Open Nutrition details to correct a value.")
+        Text("Tap the food name to correct a value.")
           .font(.footnote)
           .foregroundStyle(Color.danger)
       }
@@ -175,6 +156,47 @@ struct LoggerReviewItem: View {
     ) {
       Button("Remove food", role: .destructive) { model.removeItem(item.id) }
     }
+  }
+
+  /// "Greek yogurt ⌄" over "60 kcal · P 10g · C 4g · F 0g". Tap to show or hide Nutrition details.
+  private func nameToggle(_ macros: MacroTotals) -> some View {
+    let kcal = Macros.format(macros.calories, maxFractionDigits: 0)
+    let protein = Macros.format(macros.protein, maxFractionDigits: 0)
+    let carbs = Macros.format(macros.carbs, maxFractionDigits: 0)
+    let fat = Macros.format(macros.fat, maxFractionDigits: 0)
+    let chevron = Text(Image(systemName: isExpanded ? "chevron.up" : "chevron.down"))
+      .font(.caption.weight(.semibold))
+      .foregroundStyle(.secondary)
+    return Button(action: onToggle) {
+      VStack(alignment: .leading, spacing: 2) {
+        // No line limit: a truncated name would also cut off the chevron.
+        Text("\(item.loggerDisplayName) \(chevron)")
+          .font(.headline)
+          .multilineTextAlignment(.leading)
+        // One line when it fits, else kcal above the macros, never a break inside the macros.
+        ViewThatFits(in: .horizontal) {
+          Text(verbatim: "\(kcal) kcal · P \(protein)g · C \(carbs)g · F \(fat)g")
+          VStack(alignment: .leading, spacing: 0) {
+            Text(verbatim: "\(kcal) kcal")
+            Text(verbatim: "P \(protein)g · C \(carbs)g · F \(fat)g")
+          }
+        }
+        .font(.footnote)
+        .fontDesign(.rounded)
+        .monospacedDigit()
+        .foregroundStyle(.secondary)
+      }
+      .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+      .contentShape(.rect)
+    }
+    .buttonStyle(.plain)
+    .accessibilityElement(children: .ignore)
+    .accessibilityAddTraits(.isButton)
+    .accessibilityIdentifier("foodRow\(index)")
+    .accessibilityLabel(
+      "\(item.loggerDisplayName), \(kcal) kilocalories, protein \(protein) grams, carbs \(carbs) grams, fat \(fat) grams. Nutrition details"
+    )
+    .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
   }
 
   private func nutritionTable(_ macros: MacroTotals) -> some View {

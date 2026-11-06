@@ -379,7 +379,7 @@ final class UXImprovementUITests: HarnessTestCase {
     let end = app.windows.firstMatch.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.94))
     start.press(forDuration: 0.05, thenDragTo: end)
     XCTAssertTrue(app.buttons["loggerPrimary"].waitForExistence(timeout: 5))
-    XCTAssertTrue(app.staticTexts["Chicken breast"].exists)
+    XCTAssertTrue(app.buttons["foodRow0"].label.hasPrefix("Chicken breast"))
   }
 
 }
