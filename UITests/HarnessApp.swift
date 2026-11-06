@@ -47,6 +47,10 @@ struct HarnessApp: App {
           AddFoodSheet()
         } else if scenario == "foodEditor" {
           FoodEditorSheet(food: PreviewData.foods[0])
+        } else if scenario == "drinkFoodEditor" {
+          FoodEditorSheet(food: LoggerFixtures.drinkFood)
+        } else if scenario == "drinkQuickLog" {
+          QuickLogSheet(food: LoggerFixtures.drinkFood)
         } else if scenario == "mealEditor" {
           MealEditorSheet(meal: PreviewData.foods[2])
         } else if scenario == "libraryTab" {

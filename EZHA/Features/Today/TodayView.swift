@@ -8,46 +8,34 @@ struct TodayView: View {
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @State private var isCalendarPresented = false
 
-  /// Pages from a year back (or the selected day, if older) to today.
-  private var days: [DateKey] {
-    let today = appModel.today
-    let first = min(appModel.selectedDate, today.adding(days: -365))
-    return Array(sequence(first: first) { $0 < today ? $0.adding(days: 1) : nil })
-  }
-
   var body: some View {
-    @Bindable var appModel = appModel
     let date = appModel.selectedDate
     NavigationStack {
-      // Paging view: swipe right for the previous day, left for the next one.
-      TabView(selection: $appModel.selectedDate) {
-        ForEach(days) { day in
-          DayContent(date: day, openLogger: openLogger).tag(day)
+      // New identity per day, so the sheets and scroll position of one day do not carry over.
+      DayContent(date: date, openLogger: openLogger)
+        .id(date)
+        .background {
+          // One full-screen layer, so the bar area and the content share the same gradient.
+          BrandBackground(intensity: 0.18)
+            .mask(LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .center))
+            .background(Color.canvas)
+            .ignoresSafeArea()
         }
-      }
-      .tabViewStyle(.page(indexDisplayMode: .never))
-      .background {
-        // One full-screen layer, so the bar area and the content share the same gradient.
-        BrandBackground(intensity: 0.18)
-          .mask(LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .center))
-          .background(Color.canvas)
-          .ignoresSafeArea()
-      }
-      .navigationTitle(date.titleLabel(today: appModel.today))
-      // Large title in the same row as the buttons: saves the separate title row.
-      .toolbarTitleDisplayMode(.inlineLarge)
-      .toolbar {
-        if date != appModel.today {
+        .navigationTitle(date.titleLabel(today: appModel.today))
+        // Large title in the same row as the buttons: saves the separate title row.
+        .toolbarTitleDisplayMode(.inlineLarge)
+        .toolbar {
+          if date != appModel.today {
+            ToolbarItem(placement: .topBarTrailing) {
+              Button("Today") { goTo(appModel.today) }
+            }
+          }
           ToolbarItem(placement: .topBarTrailing) {
-            Button("Today") { goTo(appModel.today) }
+            Button("Choose day", systemImage: "calendar") { isCalendarPresented = true }
+              .popover(isPresented: $isCalendarPresented) { calendar }
           }
         }
-        ToolbarItem(placement: .topBarTrailing) {
-          Button("Choose day", systemImage: "calendar") { isCalendarPresented = true }
-            .popover(isPresented: $isCalendarPresented) { calendar }
-        }
-      }
-      .sensoryFeedback(.selection, trigger: date)
+        .sensoryFeedback(.selection, trigger: date)
     }
   }
 
@@ -117,7 +105,6 @@ private struct DayContent: View {
             TargetButton(bundle: bundle, isToday: isToday) { isTargetSheetPresented = true }
           }
         }
-        .listRowBackground(Color.surface)
         entriesSection(bundle)
       } else if state == .loading || state == .idle {
         placeholder
@@ -186,7 +173,6 @@ private struct DayContent: View {
               EntryActions.delete(entry, appModel: appModel)
             }
           }
-          .listRowBackground(Color.surface)
         }
       }
     } header: {
@@ -221,7 +207,6 @@ private struct DayContent: View {
       }
     }
     .redacted(reason: .placeholder)
-    .listRowBackground(Color.surface)
     .accessibilityLabel("Loading")
   }
 }

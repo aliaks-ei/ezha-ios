@@ -43,7 +43,7 @@ struct EntryDetailSheet: View {
               Spacer()
               VStack(alignment: .trailing, spacing: 2) {
                 KcalText(value: item.calories).font(.subheadline.weight(.semibold))
-                Text("\(item.grams, format: .number.precision(.fractionLength(0...1))) g")
+                Text(item.unit.format(item.grams))
                   .font(.caption)
                   .foregroundStyle(.secondary)
                   .monospacedDigit()

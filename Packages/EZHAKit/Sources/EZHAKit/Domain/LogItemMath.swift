@@ -16,7 +16,10 @@ public struct LogItem: Codable, Sendable, Hashable, Identifiable {
 
   public var id: UUID
   public var name: String
+  /// The amount text, in `unit`.
   public var gramsText: String
+  /// `ml` for drinks. `per100g` then means per 100 ml.
+  public var unit: AmountUnit
   public var macroBasis: MacroBasis
   public var baseGrams: Double
   public var base: MacroTotals
@@ -27,13 +30,15 @@ public struct LogItem: Codable, Sendable, Hashable, Identifiable {
   public var isNutritionMissing: Bool
 
   public init(
-    id: UUID = UUID(), name: String, gramsText: String, macroBasis: MacroBasis,
-    baseGrams: Double, base: MacroTotals, origin: Origin, linkedFoodId: UUID? = nil,
-    aiConfidence: Double? = nil, aiNotes: String = "", isNutritionMissing: Bool = false
+    id: UUID = UUID(), name: String, gramsText: String, unit: AmountUnit = .g,
+    macroBasis: MacroBasis, baseGrams: Double, base: MacroTotals, origin: Origin,
+    linkedFoodId: UUID? = nil, aiConfidence: Double? = nil, aiNotes: String = "",
+    isNutritionMissing: Bool = false
   ) {
     self.id = id
     self.name = name
     self.gramsText = gramsText
+    self.unit = unit
     self.macroBasis = macroBasis
     self.baseGrams = baseGrams
     self.base = base
@@ -43,12 +48,39 @@ public struct LogItem: Codable, Sendable, Hashable, Identifiable {
     self.aiNotes = aiNotes
     self.isNutritionMissing = isNutritionMissing
   }
+
+  enum CodingKeys: String, CodingKey {
+    case id, name, gramsText, unit, macroBasis, baseGrams, base, origin, linkedFoodId
+    case aiConfidence, aiNotes, isNutritionMissing
+  }
+
+  /// Drafts saved before PET-114 have no unit.
+  public init(from decoder: any Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    id = try c.decode(UUID.self, forKey: .id)
+    name = try c.decode(String.self, forKey: .name)
+    gramsText = try c.decode(String.self, forKey: .gramsText)
+    unit = try c.decodeIfPresent(AmountUnit.self, forKey: .unit) ?? .g
+    macroBasis = try c.decode(MacroBasis.self, forKey: .macroBasis)
+    baseGrams = try c.decode(Double.self, forKey: .baseGrams)
+    base = try c.decode(MacroTotals.self, forKey: .base)
+    origin = try c.decode(Origin.self, forKey: .origin)
+    linkedFoodId = try c.decodeIfPresent(UUID.self, forKey: .linkedFoodId)
+    aiConfidence = try c.decodeIfPresent(Double.self, forKey: .aiConfidence)
+    aiNotes = try c.decode(String.self, forKey: .aiNotes)
+    isNutritionMissing = try c.decode(Bool.self, forKey: .isNutritionMissing)
+  }
 }
 
 public enum LogItemMath {
   public static let maxGrams: Double = 5000
   public static let stepGrams: Double = 5
-  public static let maxGramsMessage = "Max grams per item is 5000g."
+  public static let maxGramsMessage = maxAmountMessage(.g)
+
+  /// "Max amount per item is 5000 g." or "… 5000 ml."
+  public static func maxAmountMessage(_ unit: AmountUnit) -> String {
+    String(localized: "Max amount per item is \(unit.format(maxGrams, maxFractionDigits: 0)).")
+  }
 
   /// Parsed grams clamped to 0...5000, or nil when the text is not a number.
   public static func normalizedGrams(_ text: String) -> Double? {
@@ -106,6 +138,7 @@ public enum LogItemMath {
     return LogItem(
       name: food.name,
       gramsText: Macros.format(grams, maxFractionDigits: 1),
+      unit: food.amountUnit,
       macroBasis: .per100g,
       baseGrams: 100,
       base: Macros.resolvedPer100g(food),
@@ -115,7 +148,7 @@ public enum LogItemMath {
     )
   }
 
-  /// Serving size for per-serving foods, else 100 g.
+  /// Serving size for per-serving foods, else 100 (g or ml).
   public static func defaultGrams(_ food: SavedFood) -> Double {
     if food.unitType == .perServing, let size = food.servingSize, size > 0 { return size }
     return 100
@@ -130,6 +163,7 @@ public enum LogItemMath {
       return LogItem(
         name: ingredient.name,
         gramsText: Macros.format(grams, maxFractionDigits: 1),
+        unit: ingredient.unit,
         macroBasis: .per100g,
         baseGrams: 100,
         base: missing ? .zero : ingredient.macros.scaled(by: 100 / grams),
@@ -165,6 +199,7 @@ public enum LogItemMath {
       return LogItem(
         name: item.name.trimmed,
         gramsText: Macros.format(grams, maxFractionDigits: 1),
+        unit: item.unit,
         macroBasis: .perOriginal,
         baseGrams: grams,
         base: item.macros,
@@ -175,7 +210,7 @@ public enum LogItemMath {
     }
   }
 
-  /// Label results are per 100 g. Grams = grams eaten, or 100.
+  /// Label results are per 100 g, or per 100 ml for a millilitre item. Amount = amount eaten, or 100.
   public static func fromLabelEstimate(
     _ estimate: Estimate, grams: Double?, fallbackName: String = "Nutrition label"
   ) -> [LogItem] {
@@ -192,7 +227,8 @@ public enum LogItemMath {
     }
     return items.map { item in
       LogItem(
-        name: item.name.trimmed, gramsText: gramsText, macroBasis: .per100g, baseGrams: 100,
+        name: item.name.trimmed, gramsText: gramsText, unit: item.unit, macroBasis: .per100g,
+        baseGrams: 100,
         base: item.macros, origin: .ai, aiConfidence: item.confidence ?? estimate.confidence,
         aiNotes: item.notes ?? estimate.notes)
     }
@@ -235,7 +271,7 @@ public enum LogItemMath {
         !item.isNutritionMissing
       else { return nil }
       return SavedMealIngredient(
-        name: item.name.trimmed, grams: grams, macros: macros(item),
+        name: item.name.trimmed, grams: grams, unit: item.unit, macros: macros(item),
         linkedFoodId: item.linkedFoodId)
     }
   }

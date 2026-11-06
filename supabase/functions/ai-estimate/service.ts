@@ -12,6 +12,7 @@ import {
   normalizeMeal,
   type Result,
   shouldEscalate,
+  UNITS,
 } from "./core.ts";
 
 const cors = {
@@ -82,7 +83,8 @@ export function createHandler(
         payload.items.some((item) =>
           !item || typeof item.name !== "string" || !item.name.trim() ||
           typeof item.grams !== "number" || !Number.isFinite(item.grams) ||
-          item.grams <= 0 || item.grams > 5000
+          item.grams <= 0 || item.grams > 5000 ||
+          (item.unit != null && !UNITS.includes(item.unit))
         )
       ) {
         return json({ error: "Invalid items payload." }, 400);
@@ -90,6 +92,7 @@ export function createHandler(
       items = payload.items.map((item) => ({
         name: item.name.trim(),
         grams: item.grams,
+        unit: item.unit ?? "g",
       }));
     }
     if (!text && !imagePath && !items.length) {
@@ -438,7 +441,7 @@ async function loadCatalog(
   const timer = setTimeout(cancel, 1500);
   try {
     const select =
-      "id,name,is_meal,serving_size,serving_unit,calories_per_100g,protein_per_100g,carbs_per_100g,fat_per_100g,calories_per_serving,protein_per_serving,carbs_per_serving,fat_per_serving";
+      "id,name,is_meal,amount_unit,serving_size,serving_unit,calories_per_100g,protein_per_100g,carbs_per_100g,fat_per_100g,calories_per_serving,protein_per_serving,carbs_per_serving,fat_per_serving";
     const response = await fetcher(
       `${supabaseUrl}/rest/v1/saved_foods?is_meal=eq.false&select=${select}&order=is_favorite.desc,last_used_at.desc.nullslast,id.asc&limit=60`,
       {

@@ -159,12 +159,37 @@ public struct FoodEntry: Codable, Sendable, Hashable, Identifiable {
   }
 }
 
+/// What an item amount measures. Nutrition is per 100 of this unit.
+/// Rows store the amount in their `grams` column for older builds and the PWA.
+public enum AmountUnit: String, Codable, Sendable, Hashable, CaseIterable {
+  case g
+  case ml
+
+  /// "g" or "ml", after a number.
+  public var symbol: String { rawValue }
+
+  /// Spoken name for VoiceOver: "grams" or "millilitres".
+  public var spokenName: String {
+    switch self {
+    case .g: String(localized: "grams")
+    case .ml: String(localized: "millilitres")
+    }
+  }
+
+  /// "100 g" or "100 ml".
+  public func format(_ amount: Double, maxFractionDigits: Int = 1) -> String {
+    "\(Macros.format(amount, maxFractionDigits: maxFractionDigits)) \(symbol)"
+  }
+}
+
 public struct FoodEntryItem: Codable, Sendable, Hashable, Identifiable {
   public var id: UUID
   public var entryId: UUID
   public var userId: UUID?
   public var name: String
+  /// Amount in `unit`. The column name is kept for older builds.
   public var grams: Double
+  public var unit: AmountUnit
   public var calories: Double
   public var protein: Double
   public var carbs: Double
@@ -174,14 +199,16 @@ public struct FoodEntryItem: Codable, Sendable, Hashable, Identifiable {
   public var createdAt: Date?
 
   public init(
-    id: UUID, entryId: UUID, userId: UUID? = nil, name: String, grams: Double, macros: MacroTotals,
-    aiConfidence: Double?, aiNotes: String, createdAt: Date? = nil
+    id: UUID, entryId: UUID, userId: UUID? = nil, name: String, grams: Double,
+    unit: AmountUnit = .g, macros: MacroTotals, aiConfidence: Double?, aiNotes: String,
+    createdAt: Date? = nil
   ) {
     self.id = id
     self.entryId = entryId
     self.userId = userId
     self.name = name
     self.grams = grams
+    self.unit = unit
     self.calories = macros.calories
     self.protein = macros.protein
     self.carbs = macros.carbs
@@ -199,10 +226,28 @@ public struct FoodEntryItem: Codable, Sendable, Hashable, Identifiable {
     case id
     case entryId = "entry_id"
     case userId = "user_id"
-    case name, grams, calories, protein, carbs, fat
+    case name, grams, unit, calories, protein, carbs, fat
     case aiConfidence = "ai_confidence"
     case aiNotes = "ai_notes"
     case createdAt = "created_at"
+  }
+
+  public init(from decoder: any Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    id = try c.decode(UUID.self, forKey: .id)
+    entryId = try c.decode(UUID.self, forKey: .entryId)
+    userId = try c.decodeIfPresent(UUID.self, forKey: .userId)
+    name = try c.decode(String.self, forKey: .name)
+    grams = try c.decode(Double.self, forKey: .grams)
+    // Rows and cached payloads from before PET-114 have no unit.
+    unit = (try? c.decodeIfPresent(AmountUnit.self, forKey: .unit)) ?? .g
+    calories = try c.decode(Double.self, forKey: .calories)
+    protein = try c.decode(Double.self, forKey: .protein)
+    carbs = try c.decode(Double.self, forKey: .carbs)
+    fat = try c.decode(Double.self, forKey: .fat)
+    aiConfidence = try c.decodeIfPresent(Double.self, forKey: .aiConfidence)
+    aiNotes = try c.decode(String.self, forKey: .aiNotes)
+    createdAt = try c.decodeIfPresent(Date.self, forKey: .createdAt)
   }
 }
 
@@ -273,8 +318,11 @@ public struct SavedFood: Codable, Sendable, Hashable, Identifiable {
   public var userId: UUID?
   public var name: String
   public var unitType: FoodUnitType
+  /// Serving size, in `amountUnit`.
   public var servingSize: Double?
   public var servingUnit: String?
+  /// `ml`: the per-100 values are per 100 ml and `servingSize` is in millilitres.
+  public var amountUnit: AmountUnit
   public var caloriesPer100g: Double
   public var proteinPer100g: Double
   public var carbsPer100g: Double
@@ -295,7 +343,8 @@ public struct SavedFood: Codable, Sendable, Hashable, Identifiable {
 
   public init(
     id: UUID, userId: UUID? = nil, name: String, unitType: FoodUnitType = .per100g,
-    servingSize: Double? = nil, servingUnit: String? = nil, per100g: MacroTotals = .zero,
+    servingSize: Double? = nil, servingUnit: String? = nil, amountUnit: AmountUnit = .g,
+    per100g: MacroTotals = .zero,
     perServing: MacroTotals = .zero, isMeal: Bool = false, isFavorite: Bool = false,
     lastUsedAt: Date? = nil, usesMorning: Int = 0, usesMidday: Int = 0, usesEvening: Int = 0,
     createdAt: Date? = nil, updatedAt: Date? = nil
@@ -306,6 +355,7 @@ public struct SavedFood: Codable, Sendable, Hashable, Identifiable {
     self.unitType = unitType
     self.servingSize = servingSize
     self.servingUnit = servingUnit
+    self.amountUnit = amountUnit
     self.caloriesPer100g = per100g.calories
     self.proteinPer100g = per100g.protein
     self.carbsPer100g = per100g.carbs
@@ -362,6 +412,7 @@ public struct SavedFood: Codable, Sendable, Hashable, Identifiable {
     case unitType = "unit_type"
     case servingSize = "serving_size"
     case servingUnit = "serving_unit"
+    case amountUnit = "amount_unit"
     case caloriesPer100g = "calories_per_100g"
     case proteinPer100g = "protein_per_100g"
     case carbsPer100g = "carbs_per_100g"
@@ -388,6 +439,7 @@ public struct SavedFood: Codable, Sendable, Hashable, Identifiable {
     unitType = try c.decodeIfPresent(FoodUnitType.self, forKey: .unitType) ?? .per100g
     servingSize = try c.decodeIfPresent(Double.self, forKey: .servingSize)
     servingUnit = try c.decodeIfPresent(String.self, forKey: .servingUnit)
+    amountUnit = (try? c.decodeIfPresent(AmountUnit.self, forKey: .amountUnit)) ?? .g
     caloriesPer100g = try c.decodeIfPresent(Double.self, forKey: .caloriesPer100g) ?? 0
     proteinPer100g = try c.decodeIfPresent(Double.self, forKey: .proteinPer100g) ?? 0
     carbsPer100g = try c.decodeIfPresent(Double.self, forKey: .carbsPer100g) ?? 0
@@ -412,7 +464,9 @@ public struct SavedMealIngredient: Codable, Sendable, Hashable, Identifiable {
   public var mealId: UUID?
   public var userId: UUID?
   public var name: String
+  /// Amount in `unit`. The column name is kept for older builds.
   public var grams: Double
+  public var unit: AmountUnit
   public var calories: Double
   public var protein: Double
   public var carbs: Double
@@ -422,13 +476,14 @@ public struct SavedMealIngredient: Codable, Sendable, Hashable, Identifiable {
 
   public init(
     id: UUID = UUID(), mealId: UUID? = nil, userId: UUID? = nil, name: String, grams: Double,
-    macros: MacroTotals, linkedFoodId: UUID? = nil, createdAt: Date? = nil
+    unit: AmountUnit = .g, macros: MacroTotals, linkedFoodId: UUID? = nil, createdAt: Date? = nil
   ) {
     self.id = id
     self.mealId = mealId
     self.userId = userId
     self.name = name
     self.grams = grams
+    self.unit = unit
     self.calories = macros.calories
     self.protein = macros.protein
     self.carbs = macros.carbs
@@ -445,9 +500,25 @@ public struct SavedMealIngredient: Codable, Sendable, Hashable, Identifiable {
     case id
     case mealId = "meal_id"
     case userId = "user_id"
-    case name, grams, calories, protein, carbs, fat
+    case name, grams, unit, calories, protein, carbs, fat
     case linkedFoodId = "linked_food_id"
     case createdAt = "created_at"
+  }
+
+  public init(from decoder: any Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    id = try c.decode(UUID.self, forKey: .id)
+    mealId = try c.decodeIfPresent(UUID.self, forKey: .mealId)
+    userId = try c.decodeIfPresent(UUID.self, forKey: .userId)
+    name = try c.decode(String.self, forKey: .name)
+    grams = try c.decode(Double.self, forKey: .grams)
+    unit = (try? c.decodeIfPresent(AmountUnit.self, forKey: .unit)) ?? .g
+    calories = try c.decode(Double.self, forKey: .calories)
+    protein = try c.decode(Double.self, forKey: .protein)
+    carbs = try c.decode(Double.self, forKey: .carbs)
+    fat = try c.decode(Double.self, forKey: .fat)
+    linkedFoodId = try c.decodeIfPresent(UUID.self, forKey: .linkedFoodId)
+    createdAt = try c.decodeIfPresent(Date.self, forKey: .createdAt)
   }
 }
 

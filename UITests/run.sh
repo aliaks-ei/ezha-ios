@@ -16,6 +16,12 @@ xcodebuild test -project EZHAUITests.xcodeproj -scheme EZHAUITests \
   -derivedDataPath /tmp/ezha-uitests-dd -resultBundlePath "$OUT/result.xcresult" "$@" \
   > "$OUT/xcodebuild.log" 2>&1 || status=$?
 grep -E "error:|Test Case .*(passed|failed)|\*\* TEST" "$OUT/xcodebuild.log" | sed 's/^.*Test Case/Test Case/' || true
+# A filter that matches nothing still reports TEST SUCCEEDED. Treat it as a failure.
+if [ $status -eq 0 ] && grep -q "Executed 0 tests" "$OUT/xcodebuild.log" \
+  && ! grep -qE "Executed [1-9][0-9]* tests?" "$OUT/xcodebuild.log"; then
+  echo "error: no tests ran. Check the -only-testing name."
+  status=1
+fi
 if [ -d "$OUT/result.xcresult" ]; then
   xcrun xcresulttool export attachments --path "$OUT/result.xcresult" --output-path "$OUT/screenshots" > /dev/null
   # Rename "<uuid>.png" to the attachment name, e.g. "402-library-dark.png".

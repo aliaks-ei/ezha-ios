@@ -1,3 +1,6 @@
+/// Amount unit of an item. Nutrition values are per 100 of this unit.
+export type Unit = "g" | "ml";
+export const UNITS: Unit[] = ["g", "ml"];
 export type Macros = {
   calories: number;
   protein: number;
@@ -10,9 +13,12 @@ export type CatalogFood = {
   description: string;
   source: "usda" | "library";
   source_id: string;
+  // Per 100 g, or per 100 ml when unit is "ml". The bundled USDA catalog is per 100 g.
   per100g: Macros;
+  unit?: Unit;
 };
-export type ItemInput = { name: string; grams: number };
+// `grams` is the amount in `unit` (default "g"). The name stays for older clients.
+export type ItemInput = { name: string; grams: number; unit?: Unit };
 export type Review = {
   question: string;
   kind: "portion" | "ingredient" | "identity";
@@ -20,7 +26,8 @@ export type Review = {
 };
 export type MealItem = {
   name: string;
-  grams: number;
+  amount: number;
+  unit: Unit;
   portion_basis:
     | "user_weight"
     | "user_quantity"
@@ -55,7 +62,9 @@ export type LabelReading = {
 };
 export type EstimateItem = Macros & {
   name: string;
+  // Amount in `unit`. Older clients read it as grams.
   grams: number;
+  unit: Unit;
   notes: string;
   nutrition_source: "usda" | "library" | "estimated" | "label";
   nutrition_source_id: string | null;
@@ -94,7 +103,8 @@ export const mealSchema = object({
     type: "array",
     items: object({
       name: { type: "string" },
-      grams: { type: "number" },
+      amount: { type: "number" },
+      unit: enumField(UNITS),
       portion_basis: enumField([
         "user_weight",
         "user_quantity",
@@ -168,23 +178,26 @@ export function buildModelBody(options: {
       "When as-sold and as-prepared columns differ, choose the one matching user context; default to as sold and mention it in notes. Never combine columns.",
       "Return values exactly for that column. Prefer kcal when both kcal and kJ are printed.",
       "Do not change printed energy to fit 4P+4C+9F: fibre, polyols and rounding can differ.",
-      "reference_mass_grams is 100 for per_100g; otherwise only the printed gram mass corresponding to that column, or null.",
-      "For per_100ml never assume water density. For per_serving do not guess serving mass.",
+      "reference_mass_grams is 100 for per_100g, null for per_100ml; for per_serving only the printed gram mass of the serving, or null.",
+      "Never convert millilitres to grams or assume a density. For per_serving do not guess serving mass.",
       "Return unreadable with label null if any required nutrient or column basis is unreadable. Never fill missing values with zero.",
       "Return not_food with label null when no nutrition label is present.",
       "Ignore consumption amounts in user text; scaling happens in application code exactly once.",
       `User context: ${JSON.stringify(text)}`,
     ].join("\n")
     : [
-      "Identify foods and their preparation, and estimate edible weights in grams. Return no totals.",
-      "Use explicit user weights exactly for the corresponding food, never apply one weight to the entire meal.",
-      "A number without a weight unit is a count. Use realistic count-to-weight estimates and mark user_quantity.",
-      "Only user_weight is measured. For photos without a stated weight use visual_estimate; text without quantities uses typical_portion.",
+      "Identify foods and their preparation, and estimate each amount. Return no totals.",
+      "Use unit g (edible weight in grams) for foods. Use unit ml (volume in millilitres) for drinks and liquids measured by volume, such as beer, milk, juice, soda, wine, water or soup by the glass.",
+      "Convert volume units to ml: 1 l = 1000 ml, 1 cl = 10 ml, 1 pint = 568 ml (UK) unless the user says US pint (473 ml), 1 fl oz = 30 ml.",
+      "Use explicit user weights and volumes exactly for the corresponding food, never apply one amount to the entire meal. A volume (ml, l, cl, pint, fl oz) is a measured amount, not a count.",
+      "A number without a weight or volume unit is a count. Use realistic count-to-amount estimates (for drinks, a typical can, bottle or glass volume in ml) and mark user_quantity.",
+      "Only user_weight is measured (a stated weight or volume). For photos without a stated amount use visual_estimate; text without quantities uses typical_portion.",
       "Prefer a matching confirmed library food over a generic USDA entry ONLY when the same food/product and preparation are supported by the input.",
       "Choose a catalog_id only for a compatible identity, preparation and composition. Raw and cooked weights are not interchangeable.",
       "Do not match a mixed recipe, coated food, branded product or sauce to a plain ingredient just to obtain a match.",
       "Prepared references may already include cooking fat. Do not add it again unless the user explicitly describes additional fat.",
-      "For a catalog match set fallback_per100g to null. If no suitable match exists, use catalog_id null and estimate per-100-g nutrition, explicitly explaining assumptions in notes.",
+      "Catalog references are per 100 g unless marked per 100 ml. Choose a catalog_id only when its unit matches the item unit.",
+      "For a catalog match set fallback_per100g to null. If no suitable match exists, use catalog_id null and estimate nutrition per 100 of the item unit (per 100 g or per 100 ml), explicitly explaining assumptions in notes.",
       "Keep components useful and distinct. Do not invent unseen oil, dressing or ingredients; ask if they could materially change the estimate.",
       "Give at most one short review question about the biggest unresolved portion, ingredient or identity; set review null when input is sufficiently clear.",
       "A portion question references an item_index; identity/ingredient answers can update the description. Avoid numerical confidence scores.",
@@ -193,10 +206,14 @@ export function buildModelBody(options: {
       "All nutrition numbers must be finite and nonnegative. Do not output units in numeric fields.",
       "Available nutrition references (IDs and identities only; application supplies nutrients):",
       ...catalog.map((food) =>
-        `${food.id}: ${food.name} (${food.description})`
+        `${food.id}: ${food.name} (${food.description})${
+          food.unit === "ml" ? " [per 100 ml]" : ""
+        }`
       ),
       `User input: ${JSON.stringify(text)}`,
-      `Explicit items (preserve order and weights): ${JSON.stringify(items)}`,
+      `Explicit items (preserve order, amounts and units; grams is the amount in unit, default g): ${
+        JSON.stringify(items)
+      }`,
     ].join("\n");
   return {
     ...modelSettings(model, isLabel),
@@ -286,15 +303,15 @@ export function normalizeLabel(reading: LabelReading): Result {
       "The nutrition label basis isn't readable. Retake the photo.",
     );
   }
-  const mass = label.basis === "per_100g" ? 100 : label.reference_mass_grams;
+  // A per-100-ml column stays in millilitres: no density guess.
+  const unit: Unit = label.basis === "per_100ml" ? "ml" : "g";
+  const mass = label.basis === "per_serving" ? label.reference_mass_grams : 100;
   if (
     typeof mass !== "number" || !Number.isFinite(mass) || mass <= 0 ||
     mass > 5000
   ) {
     throw new Error(
-      label.basis === "per_100ml"
-        ? "This label uses millilitres without a printed gram conversion. Enter nutrition per 100 g manually."
-        : "The serving weight isn't readable. Include the serving size in grams or enter values per 100 g manually.",
+      "The serving weight isn't readable. Include the serving size in grams or enter values per 100 g manually.",
     );
   }
   const per100g = scale({
@@ -307,6 +324,7 @@ export function normalizeLabel(reading: LabelReading): Result {
   const item: EstimateItem = {
     name: reading.food_name?.trim() || "Nutrition label",
     grams: 100,
+    unit,
     ...per100g,
     nutrition_source: "label",
     nutrition_source_id: null,
@@ -318,6 +336,7 @@ export function normalizeLabel(reading: LabelReading): Result {
     totals: per100g,
     source: "label_photo",
     food_name: reading.food_name,
+    // Per 100 of the item unit. Older clients treat per 100 ml as per 100 g.
     nutrition_basis: "per_100g",
     label,
     review: null,
@@ -346,13 +365,15 @@ export function normalizeMeal(
   }
   const refs = new Map(catalog.map((food) => [food.id, food]));
   const items = reading.items.map((item, index): EstimateItem => {
-    const grams = explicitItems[index]?.grams ?? item.grams;
+    const explicit = explicitItems[index];
+    const grams = explicit?.grams ?? item.amount;
+    const unit = explicit ? explicit.unit ?? "g" : item.unit;
     if (
       typeof grams !== "number" || !Number.isFinite(grams) || grams <= 0 ||
-      grams > 5000 || !item.name?.trim()
+      grams > 5000 || !item.name?.trim() || !UNITS.includes(unit)
     ) {
       throw new Error(
-        "Analysis returned an invalid portion. Add a weight or retake the photo.",
+        "Analysis returned an invalid portion. Add an amount or retake the photo.",
       );
     }
     if (
@@ -363,14 +384,16 @@ export function normalizeMeal(
     ) {
       throw new Error("Analysis returned invalid food details.");
     }
-    const ref = item.catalog_id === null
+    const match = item.catalog_id === null
       ? undefined
       : refs.get(item.catalog_id);
-    if (item.catalog_id !== null && !ref) {
+    if (item.catalog_id !== null && !match) {
       throw new Error(
         "Analysis selected an unknown nutrition reference. Try again.",
       );
     }
+    // A per-100-g reference does not apply to a millilitre amount, and the reverse.
+    const ref = match && (match.unit ?? "g") === unit ? match : undefined;
     if (!ref && !validMacros(item.fallback_per100g)) {
       throw new Error(
         "Analysis returned incomplete nutrition values. Add details and try again.",
@@ -381,8 +404,10 @@ export function normalizeMeal(
     const flags: string[] = [];
     if (!ref) {
       const derived = 4 * per100g.protein + 4 * per100g.carbs + 9 * per100g.fat;
+      // Alcohol energy (beer, wine) is not in protein, carbs or fat. Keep the higher value for drinks.
+      const alcohol = unit === "ml" && per100g.calories > derived;
       if (
-        derived > 0 &&
+        derived > 0 && !alcohol &&
         Math.abs(derived - per100g.calories) /
               Math.max(derived, per100g.calories) > 0.2
       ) {
@@ -400,16 +425,16 @@ export function normalizeMeal(
       : "Nutrition estimated; no matching reference found.";
     const notes = [
       provenance,
-      portionEstimated
-        ? "Portion weight estimated."
-        : "User-provided portion weight.",
+      match && !ref ? `Reference ${match.name} skipped: unit differs.` : "",
+      portionEstimated ? "Portion estimated." : "User-provided portion.",
       item.identification === "uncertain" ? "Food identity needs review." : "",
       item.notes,
       ...flags,
     ].filter(Boolean).join(" ");
     return {
-      name: explicitItems[index]?.name ?? item.name.trim(),
+      name: explicit?.name ?? item.name.trim(),
       grams,
+      unit,
       ...scale(per100g, grams / 100),
       nutrition_source: ref?.source ?? "estimated",
       nutrition_source_id: ref?.source_id ?? null,
@@ -476,12 +501,14 @@ export function libraryFood(row: Record<string, unknown>): CatalogFood | null {
   const per100 = read("per_100g");
   const perServing = read("per_serving");
   const mass = row.serving_size;
+  // amount_unit "ml": per-100 values are per 100 ml and serving_size is in ml.
+  const unit: Unit = row.amount_unit === "ml" ? "ml" : "g";
   let macros: Macros;
   if (validMacros(per100) && Object.values(per100).some((v) => v > 0)) {
     macros = per100;
   } else if (
     validMacros(perServing) && Object.values(perServing).some((v) => v > 0) &&
-    // EZHA stores serving_size in grams; serving_unit is a display name such as cup or slice.
+    // EZHA stores serving_size in the food unit; serving_unit is a display name such as cup or slice.
     typeof mass === "number" && Number.isFinite(mass) && mass > 0 &&
     mass <= 5000
   ) macros = scale(perServing, 100 / mass);
@@ -498,5 +525,6 @@ export function libraryFood(row: Record<string, unknown>): CatalogFood | null {
     source: "library",
     source_id: row.id,
     per100g: macros,
+    unit,
   };
 }

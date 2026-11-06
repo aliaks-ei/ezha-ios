@@ -55,10 +55,11 @@ struct MealEditorSheet: View {
                   onStep: { delta in
                     item.gramsText = LogItemMath.step(item.gramsText, by: delta).text
                   },
-                  onFocusLost: {},
-                  accessibilityName: String(localized: "Portion of \(item.name) in grams"))
+                  onFocusLost: {}, unit: item.unit.label,
+                  accessibilityName: String(
+                    localized: "Portion of \(item.name) in \(item.unit.spokenName)"))
               }
-              if let error = NumericInput.portionError(item.gramsText) {
+              if let error = NumericInput.portionError(item.gramsText, unit: item.unit) {
                 Text(error).font(.footnote).foregroundStyle(Color.danger)
               }
               if item.isNutritionMissing {

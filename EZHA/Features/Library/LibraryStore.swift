@@ -14,6 +14,8 @@ final class LibraryStore {
 
   @ObservationIgnored private let clients: AppClients
   @ObservationIgnored private let cache: FileCache
+  /// Deletes waiting for their undo window to end, by food id.
+  @ObservationIgnored private var pendingDeletes: [UUID: Task<Void, Never>] = [:]
 
   init(clients: AppClients, cache: FileCache) {
     self.clients = clients
@@ -31,7 +33,8 @@ final class LibraryStore {
     isLoading = true
     defer { isLoading = false }
     do {
-      foods = try await clients.library.list()
+      // A food waiting to be deleted stays hidden, even though the server still has it.
+      foods = try await clients.library.list().filter { pendingDeletes[$0.id] == nil }
       hasLoaded = true
       errorMessage = nil
       await cache.write(foods, for: "library")
@@ -71,10 +74,38 @@ final class LibraryStore {
     await persist()
   }
 
-  func delete(_ food: SavedFood) async throws {
-    try await clients.library.deleteFood(food.id)
-    foods.removeAll { $0.id == food.id }
-    await persist()
+  /// Hides the food at once and deletes it on the server after `delay`. Returns the undo
+  /// action. If the delete fails, the food comes back and `onFailure` gets the error.
+  func delete(
+    _ food: SavedFood, after delay: Duration,
+    onFailure: @escaping @MainActor (Error) -> Void
+  ) -> @MainActor () -> Void {
+    guard let index = foods.firstIndex(where: { $0.id == food.id }) else { return {} }
+    foods.remove(at: index)
+    pendingDeletes[food.id]?.cancel()
+    pendingDeletes[food.id] = Task { [weak self] in
+      try? await Task.sleep(for: delay)
+      guard let self, !Task.isCancelled else { return }
+      do {
+        try await clients.library.deleteFood(food.id)
+        pendingDeletes[food.id] = nil
+        await persist()
+      } catch {
+        pendingDeletes[food.id] = nil
+        restore(food, at: index)
+        onFailure(error)
+      }
+    }
+    return { [weak self] in
+      guard let self, let task = pendingDeletes.removeValue(forKey: food.id) else { return }
+      task.cancel()
+      restore(food, at: index)
+    }
+  }
+
+  private func restore(_ food: SavedFood, at index: Int) {
+    guard !foods.contains(where: { $0.id == food.id }) else { return }
+    foods.insert(food, at: min(index, foods.count))
   }
 
   func toggleFavorite(_ food: SavedFood) async throws {
@@ -114,6 +145,8 @@ final class LibraryStore {
   }
 
   func clear() {
+    for task in pendingDeletes.values { task.cancel() }
+    pendingDeletes = [:]
     foods = []
     ingredients = [:]
     hasLoaded = false

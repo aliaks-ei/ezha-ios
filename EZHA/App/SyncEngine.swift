@@ -47,8 +47,8 @@ final class SyncEngine {
   }
 
   /// Queues a delete in 5 s. Returns the outbox id for undo, or nil when a pending log was dropped.
-  func enqueueDelete(entryId: UUID, date: DateKey) async throws -> UUID? {
-    let id = try await processor.enqueueDelete(entryId: entryId, date: date)
+  func enqueueDelete(entryId: UUID, date: DateKey, delay: TimeInterval = 5) async throws -> UUID? {
+    let id = try await processor.enqueueDelete(entryId: entryId, date: date, delay: delay)
     await refresh()
     scheduleWake()
     return id

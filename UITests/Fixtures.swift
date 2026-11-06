@@ -12,6 +12,18 @@ enum LoggerFixtures {
   static func state(_ scenario: String = "review") -> LoggerState {
     var state = LoggerState()
     guard scenario != "entry", scenario != "slowEstimate" else { return state }
+    if scenario == "drink" {
+      // "330 ml beer": one millilitre item, nutrition per 100 ml.
+      state.text = "330 ml beer"
+      state.estimateUsedText = true
+      state.items = [
+        LogItem(
+          name: "Beer", gramsText: "330", unit: .ml, macroBasis: .per100g, baseGrams: 100,
+          base: drinkPer100ml, origin: .ai)
+      ]
+      state.lastAnalyzed = AnalyzeGate.Fingerprint(text: state.text, photoId: nil, isLabel: false)
+      return state
+    }
     if scenario == "library" {
       state.items = [
         LogItem(
@@ -56,6 +68,14 @@ enum LoggerFixtures {
     }
     return state
   }
+
+  static let drinkPer100ml = MacroTotals(calories: 43, protein: 0.5, carbs: 3.6, fat: 0)
+
+  /// A per-serving drink: 250 ml glass, values per 100 ml.
+  static let drinkFood = SavedFood(
+    id: UUID(), name: "Oat drink", unitType: .perServing, servingSize: 250,
+    servingUnit: "glass", amountUnit: .ml,
+    per100g: MacroTotals(calories: 46, protein: 1, carbs: 6.7, fat: 1.5))
 
   static func estimate() -> Estimate {
     Estimate(

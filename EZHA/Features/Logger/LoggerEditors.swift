@@ -24,7 +24,8 @@ extension LogItem {
   }
 }
 
-/// One food in review: calories, macros and grams. Expanded, it shows editable per-100 g values.
+/// One food in review: calories, macros and amount. Expanded, it shows editable per-100 g
+/// (or per-100 ml) values.
 struct LoggerReviewItem: View {
   var model: LoggerModel
   var item: LogItem
@@ -90,11 +91,12 @@ struct LoggerReviewItem: View {
         if !stacked { Spacer() }
         GramsField(
           text: Binding(get: { item.gramsText }, set: { model.setGrams(item.id, $0) }),
-          onStep: step, onFocusLost: commitGrams,
-          accessibilityName: String(localized: "Portion of \(item.loggerDisplayName) in grams"))
+          onStep: step, onFocusLost: commitGrams, unit: item.unit.label,
+          accessibilityName: String(
+            localized: "Portion of \(item.loggerDisplayName) in \(item.unit.spokenName)"))
       }
 
-      if let error = NumericInput.portionError(item.gramsText) {
+      if let error = NumericInput.portionError(item.gramsText, unit: item.unit) {
         Label(error, systemImage: "exclamationmark.circle")
           .font(.footnote)
           .foregroundStyle(Color.danger)
@@ -182,9 +184,10 @@ struct LoggerReviewItem: View {
         Text(sourceLabel)
           .frame(maxWidth: .infinity, alignment: .leading)
           .gridColumnAlignment(.leading)
-        Text("Per 100 g")
+        Text(item.unit.per100Title)
         Text(
-          NumericInput.portionError(item.gramsText) == nil ? "\(item.gramsText) g" : "Last valid")
+          NumericInput.portionError(item.gramsText) == nil
+            ? "\(item.gramsText) \(item.unit.symbol)" : "Last valid")
       }
       .font(.footnote)
       .foregroundStyle(.secondary)
@@ -215,11 +218,12 @@ struct LoggerReviewItem: View {
           HStack {
             nutritionField(title, id, keyPath, value: per100g[keyPath: keyPath])
               .accessibilityIdentifier("per100g-\(id)\(index)")
-            Text("per 100 g").foregroundStyle(.secondary)
+            Text(item.unit.per100Text).foregroundStyle(.secondary)
           }
           Text(
             NumericInput.portionError(item.gramsText) == nil
-              ? "\(portion) in \(item.gramsText) g" : "Last valid portion: \(portion)"
+              ? "\(portion) in \(item.gramsText) \(item.unit.symbol)"
+              : "Last valid portion: \(portion)"
           )
           .fontWeight(.semibold)
           .fontDesign(.rounded)
@@ -250,7 +254,7 @@ struct LoggerReviewItem: View {
       text: Binding(
         get: { model.nutritionText(item, field, value: value) },
         set: { model.setNutritionText(item.id, field, keyPath, $0) }),
-      itemName: item.loggerDisplayName)
+      itemName: item.loggerDisplayName, unit: item.unit)
   }
 
   private func step(_ delta: Double) {
@@ -286,6 +290,7 @@ private struct Per100gField: View {
   var title: LocalizedStringKey
   @Binding var text: String
   var itemName: String
+  var unit: AmountUnit
   @FocusState private var isFocused: Bool
   @ScaledMetric private var width: CGFloat = 56
 
@@ -302,7 +307,7 @@ private struct Per100gField: View {
         .background(Color.canvas, in: .rect(cornerRadius: 8))
         .contentShape(.rect)
         .onTapGesture { isFocused = true }
-        .accessibilityLabel(Text(title) + Text(" per 100 grams of \(itemName)"))
+        .accessibilityLabel(Text(title) + Text(" per 100 \(unit.spokenName) of \(itemName)"))
       if let error = NumericInput.nutritionError(text) {
         Image(systemName: "exclamationmark.circle.fill")
           .foregroundStyle(Color.danger)
@@ -336,16 +341,18 @@ struct LoggerPortionEditor: View {
       if let item {
         Section {
           Text(item.loggerDisplayName).font(.headline)
-          LabeledContent("Grams eaten") {
+          LabeledContent(item.unit.amountEatenTitle) {
             GramsField(
               text: $grams,
               onStep: { grams = LogItemMath.step(grams, by: $0).text },
-              onFocusLost: {})
+              onFocusLost: {}, unit: item.unit.label,
+              accessibilityName: String(
+                localized: "Portion of \(item.loggerDisplayName) in \(item.unit.spokenName)"))
           }
           .accessibilityIdentifier("portionField")
         } footer: {
           if !isValid {
-            Text("Enter a weight greater than 0 and no more than 5,000 g.")
+            Text(NumericInput.portionError(grams, unit: item.unit) ?? "")
           } else if model.state.reviewItemId == itemId && model.state.review?.kind == "portion" {
             Text("This confirms the estimated portion. Nutrition updates without another estimate.")
           }

@@ -174,6 +174,36 @@ select pg_temp.check(
   (select (uses_morning, uses_midday, uses_evening) = (0, 0, 1) from public.saved_foods where name = 'Rice'),
   'log_food_entry counts the time slot once per entry, and not without a slot');
 
+-- Millilitre items keep their unit. Items without a unit store g. A bad unit fails.
+select public.log_food_entry(
+  '{"id": "e0000000-0000-0000-0000-000000000007", "date": "2026-10-06", "input_type": "text", "calories": 141.9, "carbs": 11.9, "ai_source": "text"}',
+  '[{"name": "Beer", "grams": 330, "unit": "ml", "calories": 141.9, "carbs": 11.9}, {"name": "Pretzel", "grams": 30, "calories": 100}]');
+select pg_temp.check(
+  (select array_agg(unit || ':' || grams order by created_at) from public.food_entry_items
+    where entry_id = 'e0000000-0000-0000-0000-000000000007') = array['ml:330', 'g:30'],
+  'log_food_entry stores ml and defaults to g');
+select pg_temp.check(
+  (select d->'entries'->0->'items'->0->>'unit' from public.get_day('2026-10-06') d) = 'ml',
+  'get_day returns the item unit');
+select public.save_meal(null, 'Beer night', '[{"name": "Beer", "grams": 500, "unit": "ml", "calories": 215}, {"name": "Chips", "grams": 40, "calories": 210}]');
+select pg_temp.check(
+  (select array_agg(i.unit order by i.created_at) from public.saved_meal_ingredients i
+    join public.saved_foods m on m.id = i.meal_id where m.name = 'Beer night') = array['ml', 'g'],
+  'save_meal stores ml and defaults to g');
+select pg_temp.check(
+  (select amount_unit from public.saved_foods where name = 'Rice') = 'g',
+  'saved foods default to amount_unit g');
+do $$
+begin
+  perform public.log_food_entry(
+    '{"id": "e0000000-0000-0000-0000-000000000008", "date": "2026-10-06", "input_type": "text", "ai_source": "text"}',
+    '[{"name": "Beer", "grams": 330, "unit": "oz"}]');
+  raise exception 'FAILED: unit oz was accepted';
+exception when check_violation then
+  raise notice 'ok: an unknown unit is rejected';
+end;
+$$;
+
 -- As user B, A's rows are invisible.
 select pg_temp.as_user('bbbbbbbb-0000-0000-0000-000000000002');
 select pg_temp.check(

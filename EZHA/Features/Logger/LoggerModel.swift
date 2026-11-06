@@ -576,20 +576,20 @@ final class LoggerModel {
       confirmReviewPortion()
     } else if item.origin == .ai && !wasStale {
       state.text +=
-        "\n\(item.name): \(state.items.first { $0.id == id }?.gramsText ?? text) g eaten."
+        "\n\(item.name): \(state.items.first { $0.id == id }?.gramsText ?? text) \(item.unit.symbol) eaten."
       state.lastAnalyzed = fingerprint
       state.estimateUsedText = true
     }
     return true
   }
 
-  /// Returns true when the step reached 5000 g.
+  /// Returns true when the step reached 5000 (g or ml).
   @discardableResult
   func step(_ id: UUID, by delta: Double) -> Bool {
     guard let item = state.items.first(where: { $0.id == id }) else { return false }
     let result = LogItemMath.step(item.gramsText, by: delta)
     setGrams(id, result.text)
-    errorMessage = result.hitMax ? LogItemMath.maxGramsMessage : nil
+    errorMessage = result.hitMax ? LogItemMath.maxAmountMessage(item.unit) : nil
     return result.hitMax
   }
 
@@ -617,7 +617,7 @@ final class LoggerModel {
     }
   }
 
-  /// Sets one per-100 g value. The item keeps its grams and is stored per 100 g from now on.
+  /// Sets one per-100 g (or ml) value. The item keeps its amount and is stored per 100 from now on.
   func setPer100g(_ id: UUID, _ keyPath: WritableKeyPath<MacroTotals, Double>, _ value: Double) {
     guard value.isFinite, value >= 0,
       let index = state.items.firstIndex(where: { $0.id == id })

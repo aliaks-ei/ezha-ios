@@ -146,32 +146,25 @@ final class LoggerUITests: HarnessTestCase {
     date.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
   }
 
-  func testTodaySwipeChangesDayBothWaysAndCalendarFollows() {
+  func testTodayCalendarChangesDayAndSwipeDoesNot() {
     launch("today")
     let day: TimeInterval = 86_400
-    XCTAssertTrue(app.staticTexts["Today"].waitForExistence(timeout: 10))
+    XCTAssertTrue(app.navigationBars["Today"].waitForExistence(timeout: 10))
     XCTAssertTrue(app.staticTexts["Protein"].firstMatch.waitForExistence(timeout: 10))
     app.swipeRight()
-    XCTAssertTrue(
-      app.navigationBars[title(.now - day)].waitForExistence(timeout: 3), "previous day")
-    app.swipeRight()
-    XCTAssertTrue(app.navigationBars[title(.now - 2 * day)].waitForExistence(timeout: 3))
-    capture("today-two-days-back")
+    XCTAssertTrue(app.navigationBars["Today"].exists, "swipe keeps today")
     app.buttons["Choose day"].tap()
     XCTAssertTrue(app.datePickers.firstMatch.waitForExistence(timeout: 3))
     capture("today-calendar")
-    let selected = app.datePickers.firstMatch.buttons.matching(
-      NSPredicate(format: "selected == true")
-    ).firstMatch
-    let expected = Calendar.current.component(.day, from: .now - 2 * day)
-    XCTAssertTrue(selected.label.contains(" \(expected)"), "calendar shows \(selected.label)")
     let yesterday = (Date.now - day).formatted(.dateTime.weekday(.wide).month(.wide).day())
     app.datePickers.firstMatch.buttons[yesterday].tap()
     XCTAssertTrue(app.navigationBars[title(.now - day)].waitForExistence(timeout: 3), "picked day")
+    XCTAssertTrue(app.staticTexts["Protein"].firstMatch.waitForExistence(timeout: 10))
+    capture("today-yesterday")
     app.swipeLeft()
-    XCTAssertTrue(app.navigationBars["Today"].waitForExistence(timeout: 3), "next day")
-    app.swipeLeft()
-    XCTAssertTrue(app.navigationBars["Today"].exists, "stays on today")
+    XCTAssertTrue(app.navigationBars[title(.now - day)].exists, "swipe keeps the picked day")
+    app.buttons["Today"].firstMatch.tap()
+    XCTAssertTrue(app.navigationBars["Today"].waitForExistence(timeout: 3), "back to today")
   }
 
   func testLibraryItemCanBeFavoritedAndEdited() {

@@ -220,7 +220,7 @@ private struct LoggerContent: View {
         Text("Foods found").font(.headline)
         ForEach(Array(model.provisionalItems.enumerated()), id: \.offset) { _, item in
           LabeledContent(item.name) {
-            Text("\(Macros.format(item.grams, maxFractionDigits: 0)) g")
+            Text(item.unit.format(item.grams, maxFractionDigits: 0))
               .foregroundStyle(.secondary)
               .monospacedDigit()
           }

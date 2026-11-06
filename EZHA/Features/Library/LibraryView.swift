@@ -9,7 +9,6 @@ struct LibraryView: View {
   @State private var quickLog: SavedFood?
   @State private var editing: SavedFood?
   @State private var isAddPresented = false
-  @State private var pendingDelete: SavedFood?
   @State private var favoriteBounce: [UUID: Int] = [:]
 
   private var store: LibraryStore { appModel.libraryStore }
@@ -34,10 +33,8 @@ struct LibraryView: View {
             Section {
               ForEach(foods) { food in row(food) }
             }
-            .listRowBackground(Color.surface)
           } else {
             LibrarySections(sections: LibraryFilter.sections(foods)) { food in row(food) }
-              .listRowBackground(Color.surface)
           }
         } else if store.isLoading {
           Section {
@@ -68,16 +65,6 @@ struct LibraryView: View {
         if food.isMeal { MealEditorSheet(meal: food) } else { FoodEditorSheet(food: food) }
       }
       .sheet(isPresented: $isAddPresented) { AddFoodSheet() }
-      .confirmationDialog(
-        "Delete \(pendingDelete?.name ?? "")?",
-        isPresented: Binding(
-          get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }),
-        titleVisibility: .visible, presenting: pendingDelete
-      ) { food in
-        Button("Delete", role: .destructive) { Task { await delete(food) } }
-      } message: { _ in
-        Text("This removes it from your library. Logged meals stay.")
-      }
     }
   }
 
@@ -126,7 +113,7 @@ struct LibraryView: View {
       .tint(.brandAccent)
     }
     .swipeActions(edge: .trailing) {
-      Button("Delete", systemImage: "trash", role: .destructive) { pendingDelete = food }
+      Button("Delete", systemImage: "trash", role: .destructive) { delete(food) }
     }
     .contextMenu {
       Button("Log", systemImage: "plus.circle") { quickLog = food }
@@ -137,7 +124,7 @@ struct LibraryView: View {
         Task { await toggleFavorite(food) }
       }
       Button("Edit", systemImage: "pencil") { editing = food }
-      Button("Delete", systemImage: "trash", role: .destructive) { pendingDelete = food }
+      Button("Delete", systemImage: "trash", role: .destructive) { delete(food) }
     }
   }
 
@@ -150,12 +137,15 @@ struct LibraryView: View {
     }
   }
 
-  private func delete(_ food: SavedFood) async {
-    do {
-      try await store.delete(food)
-    } catch {
+  /// No confirmation: the row goes at once, and the toast offers "Undo" until the delete runs.
+  private func delete(_ food: SavedFood) {
+    // The delete runs a moment after the toast closes, so "Undo" never races it.
+    let undo = store.delete(food, after: ToastMessage.undoWindow + .milliseconds(500)) { error in
       appModel.showToast(OnlineError.message(for: error))
     }
+    appModel.showToast(
+      String(localized: "Deleted “\(food.name)”"), actionTitle: String(localized: "Undo"),
+      action: undo)
   }
 }
 
