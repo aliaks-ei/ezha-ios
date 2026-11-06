@@ -186,6 +186,58 @@ final class LibraryUITests: HarnessTestCase {
     }
   }
 
+  /// The bar counts selected foods and meals, not a meal's ingredients, keeps every label on
+  /// one line, and never covers the last list row.
+  func testPickerCountsSelectionsNotIngredients() {
+    let appearances = [("light", false, false), ("dark", true, false), ("large", false, true)]
+    for (name, dark, large) in appearances {
+      launch("entry", dark: dark, large: large)
+      XCTAssertTrue(app.buttons["attachLibrary"].waitForExistence(timeout: 10))
+      app.buttons["attachLibrary"].tap()
+      XCTAssertTrue(app.staticTexts["Greek yogurt"].firstMatch.waitForExistence(timeout: 5))
+      // The fixture meal has 12 ingredients. The Meals filter finds it without the keyboard.
+      app.segmentedControls.buttons["Meals"].firstMatch.tap()
+      let meal = app.staticTexts["Overnight oats"].firstMatch
+      XCTAssertTrue(meal.waitForExistence(timeout: 5))
+      meal.tap()
+      let review = app.buttons["reviewSelection"]
+      let add = app.buttons["addSelected"]
+      XCTAssertTrue(review.waitForExistence(timeout: 5))
+      XCTAssertTrue(review.label.hasPrefix("1 selected"), review.label)
+      XCTAssertEqual(add.label, "Add 1 item")
+      // 12 ingredients × 100 kcal: the total still sums every ingredient.
+      XCTAssertTrue(
+        review.label.filter(\.isNumber).hasSuffix("1200") && review.label.hasSuffix("kcal"),
+        review.label)
+      capture("picker-one-meal-\(name)")
+      app.segmentedControls.buttons["All"].firstMatch.tap()
+      for food in ["Greek yogurt", "Banana"] {
+        let row = app.staticTexts[food].firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        row.tap()
+      }
+      XCTAssertTrue(review.label.hasPrefix("3 selected"), review.label)
+      XCTAssertEqual(add.label, "Add 3 items")
+      XCTAssertTrue(review.isHittable && add.isHittable, name)
+      capture("picker-mixed-selection-\(name)")
+      // The list ends above the bar: the last row scrolls clear of it.
+      for _ in 0..<12 { app.swipeUp(velocity: .fast) }
+      let lastRow = app.cells.allElementsBoundByIndex
+        .filter { $0.exists && !$0.frame.isEmpty && $0.frame.minY < review.frame.minY }
+        .max { $0.frame.maxY < $1.frame.maxY }
+      XCTAssertNotNil(lastRow)
+      if let lastRow {
+        XCTAssertLessThanOrEqual(lastRow.frame.maxY, review.frame.minY + 1, "last row (\(name))")
+      }
+      capture("picker-list-end-\(name)")
+      review.tap()
+      XCTAssertTrue(app.navigationBars["Selected foods"].waitForExistence(timeout: 5))
+      XCTAssertTrue(app.buttons["removeSelection-Overnight oats"].exists)
+      capture("picker-review-sheet-\(name)")
+      app.terminate()
+    }
+  }
+
   func testPickerAddsUsualItemAndOffersAIForUnknownFood() {
     launch("entry")
     XCTAssertTrue(app.buttons["attachLibrary"].waitForExistence(timeout: 10))
