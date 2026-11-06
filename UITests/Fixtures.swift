@@ -53,6 +53,19 @@ enum LoggerFixtures {
           origin: .libraryFood),
       ]
     }
+    if scenario == "longName" {
+      // PET-112: a long name wraps next to the portion control on the compact row.
+      state.items += [
+        LogItem(
+          name: "Grilled chicken breast with lemon, garlic and fresh herbs", gramsText: "150",
+          macroBasis: .per100g, baseGrams: 100,
+          base: MacroTotals(calories: 165, protein: 31, carbs: 0, fat: 3.6), origin: .ai),
+        LogItem(
+          name: "Saved yogurt", gramsText: "100", macroBasis: .per100g,
+          baseGrams: 100, base: MacroTotals(calories: 60, protein: 10, carbs: 4, fat: 0),
+          origin: .libraryFood),
+      ]
+    }
     if scenario == "label" {
       state.aiItemsFromLabel = true
       state.items[0].macroBasis = .per100g

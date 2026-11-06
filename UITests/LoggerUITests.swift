@@ -158,6 +158,44 @@ final class LoggerUITests: HarnessTestCase {
     XCTAssertTrue(element("reviewTotal").label.contains("399 kcal"))
   }
 
+  /// PET-112: name and portion share one row; the name toggles Nutrition details.
+  func testCompactFoodRowNameAndPortionOnOneRow() {
+    let portion = { (index: Int) in
+      self.app.textFields.matching(NSPredicate(format: "label BEGINSWITH 'Portion of'"))
+        .element(boundBy: index)
+    }
+    for variant in ["light", "dark", "large-text"] {
+      launch("longName", dark: variant == "dark", large: variant == "large-text")
+      let row = app.buttons["foodRow1"]
+      XCTAssertTrue(row.waitForExistence(timeout: 5))
+      XCTAssertTrue(row.label.hasSuffix("Nutrition details"), row.label)
+      XCTAssertTrue(row.label.contains("kilocalories"), row.label)
+      XCTAssertEqual(row.value as? String, "Collapsed")
+      XCTAssertGreaterThanOrEqual(row.frame.height, 44)
+      let field = portion(1)
+      XCTAssertTrue(field.exists)
+      // The name and the portion control never overlap.
+      XCTAssertFalse(row.frame.intersects(field.frame), "\(row.frame) \(field.frame)")
+      if variant == "large-text" {
+        XCTAssertGreaterThanOrEqual(field.frame.minY, row.frame.maxY - 1)
+      } else {
+        XCTAssertLessThan(field.frame.minY, row.frame.maxY)
+        XCTAssertGreaterThan(field.frame.minX, row.frame.maxX - 1)
+      }
+      capture("compact-row-\(variant)")
+    }
+    launch("longName")
+    app.buttons["foodRow1"].tap()
+    XCTAssertTrue(per100g("calories", 1).waitForExistence(timeout: 5))
+    XCTAssertEqual(app.buttons["foodRow1"].value as? String, "Expanded")
+    capture("compact-row-expanded")
+    app.buttons["foodRow1"].tap()
+    XCTAssertTrue(per100g("calories", 1).waitForNonExistence(timeout: 3))
+    portion(2).coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
+    XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 5))
+    capture("compact-row-keyboard")
+  }
+
   func testLabelShowsPer100gValues() {
     launch("label")
     app.buttons["foodRow0"].tap()
