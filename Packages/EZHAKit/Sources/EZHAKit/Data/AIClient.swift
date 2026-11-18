@@ -43,16 +43,24 @@ public struct SuggestionsRequest: Codable, Sendable, Hashable {
   public var ingredientNotes: String?
   public var variationNote: String?
   public var units = SuggestionRules.units
+  /// Recent suggestion titles the model should not repeat.
+  public var avoidTitles: [String]?
+  /// The user's local hour (0–23), so ideas fit breakfast, lunch, or dinner.
+  /// Nil when planning a day other than today.
+  public var localHour: Int?
 
   public init(
     remaining: MacroTotals, mealType: SuggestionRules.MealType, maxPrepMinutes: Int,
-    ingredientNotes: String?, variationNote: String?
+    ingredientNotes: String?, variationNote: String?, avoidTitles: [String] = [],
+    localHour: Int? = nil
   ) {
     self.remaining = remaining
     self.mealType = mealType.rawValue
     self.maxPrepMinutes = maxPrepMinutes
     self.ingredientNotes = ingredientNotes?.trimmed.nonEmpty
     self.variationNote = variationNote
+    self.avoidTitles = avoidTitles.isEmpty ? nil : avoidTitles
+    self.localHour = localHour
   }
 
   enum CodingKeys: String, CodingKey {
@@ -63,6 +71,8 @@ public struct SuggestionsRequest: Codable, Sendable, Hashable {
     case ingredientNotes = "ingredient_notes"
     case variationNote = "variation_note"
     case units
+    case avoidTitles = "avoid_titles"
+    case localHour = "local_hour"
   }
 }
 

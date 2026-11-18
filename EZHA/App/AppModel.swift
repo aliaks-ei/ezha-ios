@@ -59,6 +59,7 @@ final class AppModel {
   let targetsStore: TargetsStore
   let libraryStore: LibraryStore
   let waterPresets: WaterPresetsStore
+  let suggestionHistory: SuggestionHistoryStore
 
   init(clients: AppClients, inMemory: Bool = false) {
     self.clients = clients
@@ -76,6 +77,7 @@ final class AppModel {
     targetsStore = TargetsStore(clients: clients, cache: cache)
     libraryStore = LibraryStore(clients: clients, cache: cache)
     waterPresets = WaterPresetsStore(defaults: inMemory ? nil : .standard)
+    suggestionHistory = SuggestionHistoryStore(defaults: inMemory ? nil : .standard)
     dayStore.today = { [weak self] in self?.today ?? .today() }
     targetsStore.today = dayStore.today
     dayStore.onLogged = { [weak self] in self?.logSuccessCount += 1 }
