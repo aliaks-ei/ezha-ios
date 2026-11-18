@@ -17,14 +17,20 @@ public struct EstimateRequest: Codable, Sendable, Hashable {
   public var text: String?
   public var items: [Item]?
   public var imagePath: String?
-  /// `text`, `food_photo`, or `label_photo`.
+  /// Restaurant meals: the photo of what is left. `imagePath` is the photo of what was served.
+  public var leftoverImagePath: String?
+  /// `text`, `food_photo`, `label_photo`, or `restaurant_photos`.
   public var inputType: String
   public var stream = true
 
-  public init(text: String?, items: [Item]?, imagePath: String?, inputType: String) {
+  public init(
+    text: String?, items: [Item]?, imagePath: String?, leftoverImagePath: String? = nil,
+    inputType: String
+  ) {
     self.text = text?.trimmed.nonEmpty
     self.items = items.flatMap { $0.isEmpty ? nil : $0 }
     self.imagePath = imagePath
+    self.leftoverImagePath = leftoverImagePath
     self.inputType = inputType
   }
 }

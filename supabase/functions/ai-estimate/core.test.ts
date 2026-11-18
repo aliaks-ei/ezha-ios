@@ -8,6 +8,8 @@ import {
   type MealReading,
   normalizeLabel,
   normalizeMeal,
+  normalizeRestaurant,
+  type RestaurantReading,
   shouldEscalate,
 } from "./core.ts";
 import {
@@ -678,4 +680,191 @@ Deno.test("library foods pass their optional fiber per 100 g", () => {
     libraryFood({ ...serving, fiber_per_serving: null })?.per100g.fiber,
     null,
   );
+});
+
+const restaurant = (
+  items: Partial<RestaurantReading["items"][number]>[],
+  review: RestaurantReading["review"] = null,
+): RestaurantReading => ({
+  status: "ok",
+  food_name: "Steak and fries",
+  review,
+  items: items.map((overrides) => ({
+    name: "Chicken breast",
+    amount: 300,
+    left_amount: 0,
+    unit: "g",
+    portion_basis: "visual_estimate",
+    identification: "clear",
+    catalog_id: "usda:171477",
+    fallback_per100g: null,
+    notes: "",
+    ...overrides,
+  })),
+});
+Deno.test("restaurant meals log served minus left and drop foods left untouched", () => {
+  const result = normalizeRestaurant(
+    restaurant([
+      { amount: 300, left_amount: 120 },
+      {
+        name: "Fries",
+        amount: 150,
+        left_amount: 150,
+        catalog_id: null,
+        fallback_per100g: { calories: 312, protein: 3.4, carbs: 41, fat: 15 },
+      },
+      { name: "Grilled chicken", amount: 100, left_amount: 0 },
+    ], {
+      question: "Did you eat the skin?",
+      kind: "ingredient",
+      item_index: 2,
+    }),
+    foods as CatalogFood[],
+  );
+  equal(result.items.map((item) => item.name), [
+    "Chicken breast",
+    "Grilled chicken",
+  ]);
+  equal(result.items.map((item) => item.grams), [180, 100]);
+  equal(result.items.map((item) => item.served_amount), [300, 100]);
+  // 180 g of 165 kcal per 100 g, not the 300 g served.
+  equal(result.items[0].calories, 297);
+  assert(
+    result.items[0].notes.startsWith("Served about 300 g, about 120 g left."),
+  );
+  assert(result.items[1].notes.startsWith("Served about 100 g, all eaten."));
+  assert(result.items[0].portion_estimated);
+  // The review follows its food after the fully left fries are dropped.
+  equal(result.review?.item_index, 1);
+  equal(result.source, "food_photo");
+});
+Deno.test("restaurant left amounts are clamped, validated, and an untouched meal is not logged", () => {
+  throws(
+    () =>
+      normalizeRestaurant(
+        restaurant([{ amount: 200, left_amount: 260 }]),
+        foods as CatalogFood[],
+      ),
+    "Nothing looks eaten",
+  );
+  throws(
+    () =>
+      normalizeRestaurant(
+        restaurant([{ amount: 200, left_amount: -5 }]),
+        foods as CatalogFood[],
+      ),
+    "invalid portion",
+  );
+  throws(
+    () =>
+      normalizeRestaurant(
+        { status: "unclear", food_name: null, items: [], review: null },
+        foods as CatalogFood[],
+      ),
+    "same meal",
+  );
+  // A review for a dropped food is removed, and the portion question targets what was eaten.
+  const result = normalizeRestaurant(
+    restaurant([
+      { amount: 200, left_amount: 50 },
+      { name: "Bread", amount: 60, left_amount: 60 },
+    ], {
+      question: "Was the bread buttered?",
+      kind: "ingredient",
+      item_index: 1,
+    }),
+    foods as CatalogFood[],
+  );
+  equal(result.items[0].grams, 150);
+  equal(result.review?.kind, "portion");
+  equal(result.review?.item_index, 0);
+});
+Deno.test("restaurant prompts send both photos in order with a left_amount schema", () => {
+  const body = buildModelBody({
+    model: DEFAULT_MODEL,
+    isLabel: false,
+    text: "shared the fries",
+    imageUrl: "https://before",
+    leftoverImageUrl: "https://after",
+    isRestaurant: true,
+    items: [],
+    catalog: [],
+  });
+  equal(body.text.format.name, "restaurant_meal_v1");
+  const schema = JSON.stringify(body.text.format.schema);
+  assert(schema.includes('"left_amount"'));
+  const content = body.input[0].content as unknown as Record<string, string>[];
+  equal(
+    content.filter((part) => part.type === "input_image").map((part) =>
+      part.image_url
+    ),
+    ["https://before", "https://after"],
+  );
+  assert(content[0].text.includes("Photo 2 (AFTER)"));
+  assert(content[0].text.includes("shared, given away or taken home"));
+  const plain = buildModelBody({
+    model: DEFAULT_MODEL,
+    isLabel: false,
+    text: "",
+    imageUrl: "https://before",
+    items: [],
+    catalog: [],
+  });
+  equal(plain.text.format.name, "meal_recognition_v2");
+  assert(!JSON.stringify(plain.text.format.schema).includes("left_amount"));
+});
+Deno.test("HTTP restaurant request signs both photos and returns eaten amounts", async () => {
+  const signed: string[] = [];
+  const bodies: Record<string, unknown>[] = [];
+  const handler = createHandler({
+    env: env(),
+    log: noop,
+    fetcher: ((url, init) => {
+      if (String(url).includes("saved_foods")) {
+        return Promise.resolve(new Response("[]"));
+      }
+      if (String(url).includes("/storage/")) {
+        signed.push(String(url));
+        return Promise.resolve(
+          new Response(
+            `{"signedURL":"/object/sign/food-images/${
+              String(url).split("/").slice(-2).join("/")
+            }?token=t"}`,
+          ),
+        );
+      }
+      bodies.push(JSON.parse(init?.body as string));
+      return Promise.resolve(
+        modelResponse(restaurant([{ amount: 300, left_amount: 100 }])),
+      );
+    }) as typeof fetch,
+  });
+  const response = await handler(
+    request({
+      imagePath: "u/before.jpg",
+      leftoverImagePath: "u/after.jpg",
+      inputType: "restaurant_photos",
+    }),
+  );
+  equal(response.status, 200);
+  const result = await response.json();
+  equal(result.items[0].grams, 200);
+  equal(result.items[0].served_amount, 300);
+  equal(signed.length, 2);
+  const images = JSON.stringify(bodies[0].input);
+  assert(images.indexOf("before.jpg") < images.indexOf("after.jpg"));
+});
+Deno.test("restaurant requests without both photos make no provider call", async () => {
+  const handler = createHandler({
+    env: env(),
+    log: noop,
+    fetcher: (() => {
+      throw new Error("Unexpected provider call");
+    }) as typeof fetch,
+  });
+  const response = await handler(
+    request({ imagePath: "u/before.jpg", inputType: "restaurant_photos" }),
+  );
+  equal(response.status, 400);
+  assert((await response.json()).error.includes("what's left"));
 });

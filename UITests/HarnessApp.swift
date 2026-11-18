@@ -108,7 +108,11 @@ struct HarnessApp: App {
         try? await app.sync.draftStore.save(
           LoggerFixtures.date,
           state: JSONEncoder.ezha.encode(LoggerFixtures.state(scenario)),
-          imageData: scenario == "photoDraft" ? LoggerFixtures.photo : nil)
+          imageData: scenario == "photoDraft"
+            ? LoggerFixtures.photo
+            : hasRestaurantPhotos ? LoggerFixtures.restaurantPhoto(.systemBrown) : nil,
+          leftoverImageData: hasRestaurantPhotos
+            ? LoggerFixtures.restaurantPhoto(.systemOrange) : nil)
         await app.dayStore.load(LoggerFixtures.date)
         presented = true
       }
@@ -132,6 +136,10 @@ struct HarnessApp: App {
       }
   }
 
+  private var hasRestaurantPhotos: Bool {
+    scenario == "restaurantPhotos" || scenario == "restaurantReview"
+  }
+
   private var draftAccess: LoggerDraftAccess? {
     let live = LoggerDraftAccess.live(app.sync.draftStore)
     if scenario == "slowLog" {
@@ -146,7 +154,7 @@ struct HarnessApp: App {
     guard scenario == "draftFailure" else { return nil }
     return LoggerDraftAccess(
       load: live.load,
-      save: { _, _, _ in throw AIError.message("Storage unavailable") },
+      save: { _, _, _, _ in throw AIError.message("Storage unavailable") },
       delete: live.delete)
   }
 

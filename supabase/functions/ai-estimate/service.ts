@@ -10,6 +10,8 @@ import {
   type MealReading,
   normalizeLabel,
   normalizeMeal,
+  normalizeRestaurant,
+  type RestaurantReading,
   type Result,
   shouldEscalate,
   UNITS,
@@ -66,9 +68,14 @@ export function createHandler(
     const imagePath = typeof payload.imagePath === "string"
       ? payload.imagePath.trim()
       : "";
+    const leftoverImagePath = typeof payload.leftoverImagePath === "string"
+      ? payload.leftoverImagePath.trim()
+      : "";
     const inputType = payload.inputType ?? (imagePath ? "food_photo" : "text");
     if (
-      !["text", "food_photo", "label_photo"].includes(inputType as string) ||
+      !["text", "food_photo", "label_photo", "restaurant_photos"].includes(
+        inputType as string,
+      ) ||
       text.length > 12000
     ) {
       return json(
@@ -102,6 +109,15 @@ export function createHandler(
     if (isLabel && !imagePath) {
       return json({ error: "Attach a nutrition label photo." }, 400);
     }
+    const isRestaurant = inputType === "restaurant_photos";
+    if (isRestaurant && (!imagePath || !leftoverImagePath)) {
+      return json(
+        { error: "Add a photo of what you ordered and one of what's left." },
+        400,
+      );
+    }
+    // Restaurant meals are read from the photos; explicit items do not apply.
+    if (isRestaurant) items = [];
     const apiKey = env("OPENAI_API_KEY");
     if (!apiKey) {
       return json({ error: "Meal analysis is not configured." }, 500);
@@ -126,6 +142,7 @@ export function createHandler(
         items,
         catalog: [],
         maxOutputTokens,
+        isRestaurant,
       });
       if (![DEFAULT_MODEL, FALLBACK_MODEL].includes(fallbackModel)) {
         throw new Error("Invalid fallback model.");
@@ -155,6 +172,7 @@ export function createHandler(
       model,
     };
     let imageUrl: string | null;
+    let leftoverImageUrl: string | null;
     let catalog: CatalogFood[];
     try {
       const token =
@@ -176,10 +194,10 @@ export function createHandler(
       }
       const prepStarted = performance.now();
       // Independent reads overlap. Library lookup uses the user's RLS-scoped token.
-      [imageUrl, catalog] = await Promise.all([
-        imagePath
+      const sign = (path: string) =>
+        path
           ? signedImage({
-            imagePath,
+            imagePath: path,
             token,
             supabaseUrl,
             anonKey,
@@ -187,7 +205,10 @@ export function createHandler(
             fetcher,
             signal: abort.signal,
           })
-          : Promise.resolve(null),
+          : Promise.resolve(null);
+      [imageUrl, leftoverImageUrl, catalog] = await Promise.all([
+        sign(imagePath),
+        isRestaurant ? sign(leftoverImagePath) : Promise.resolve(null),
         isLabel ? Promise.resolve([]) : loadCatalog({
           token,
           supabaseUrl,
@@ -213,7 +234,7 @@ export function createHandler(
       send("status", { stage: "requesting_model" });
       const getReading = async (allowPreviews: boolean) => {
         const modelStarted = performance.now();
-        let firstDelta = false, previewCount = 0;
+        let firstDelta = false, previewCount = 0, sentCount = 0;
         const body = buildModelBody({
           model: selectedModel,
           isLabel,
@@ -222,6 +243,8 @@ export function createHandler(
           items,
           catalog,
           maxOutputTokens,
+          isRestaurant,
+          leftoverImageUrl,
         });
         const response = await fetcher(
           `${env("OPENAI_BASE_URL") ?? "https://api.openai.com/v1"}/responses`,
@@ -252,21 +275,27 @@ export function createHandler(
           for (; previewCount < completed.length; previewCount++) {
             try {
               const explicit = items[previewCount] ? [items[previewCount]] : [];
-              const item = normalizeMeal(
-                {
-                  status: "ok",
-                  food_name: null,
-                  items: [completed[previewCount]],
-                  review: null,
-                },
-                catalog,
-                imageUrl ? "food_photo" : "text",
-                explicit,
-              ).items[0];
+              const preview = {
+                status: "ok" as const,
+                food_name: null,
+                items: [completed[previewCount]],
+                review: null,
+              };
+              // A fully left restaurant food throws here and is not previewed.
+              const item = isRestaurant
+                ? normalizeRestaurant(preview as RestaurantReading, catalog)
+                  .items[0]
+                : normalizeMeal(
+                  preview,
+                  catalog,
+                  imageUrl ? "food_photo" : "text",
+                  explicit,
+                ).items[0];
               telemetry.first_item_ms ??= Math.round(
                 performance.now() - started,
               );
-              send("item", { index: previewCount, item });
+              // Indexes stay contiguous when an item is skipped, so later previews still show.
+              send("item", { index: sentCount++, item });
             } catch {
               /* Invalid provisional data is never shown. Final validation remains mandatory. */
             }
@@ -302,6 +331,8 @@ export function createHandler(
       send("status", { stage: "finalizing" });
       const result = isLabel
         ? normalizeLabel(reading as LabelReading)
+        : isRestaurant
+        ? normalizeRestaurant(reading as RestaurantReading, catalog)
         : normalizeMeal(
           reading as MealReading,
           catalog,

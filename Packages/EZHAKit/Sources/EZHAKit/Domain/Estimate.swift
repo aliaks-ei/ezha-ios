@@ -40,11 +40,13 @@ public struct Estimate: Codable, Sendable, Hashable {
     public var nutritionSource: String?
     public var nutritionSourceId: String?
     public var portionEstimated: Bool?
+    /// Restaurant meals: the amount served, in `unit`. `grams` is the amount eaten.
+    public var servedAmount: Double?
 
     public init(
       name: String, grams: Double, unit: AmountUnit = .g, macros: MacroTotals,
       confidence: Double? = nil, notes: String? = nil, nutritionSource: String? = nil,
-      nutritionSourceId: String? = nil, portionEstimated: Bool? = nil
+      nutritionSourceId: String? = nil, portionEstimated: Bool? = nil, servedAmount: Double? = nil
     ) {
       self.name = name
       self.grams = grams
@@ -59,6 +61,7 @@ public struct Estimate: Codable, Sendable, Hashable {
       self.nutritionSource = nutritionSource
       self.nutritionSourceId = nutritionSourceId
       self.portionEstimated = portionEstimated
+      self.servedAmount = servedAmount
     }
 
     public var macros: MacroTotals {
@@ -70,6 +73,7 @@ public struct Estimate: Codable, Sendable, Hashable {
       case nutritionSource = "nutrition_source"
       case nutritionSourceId = "nutrition_source_id"
       case portionEstimated = "portion_estimated"
+      case servedAmount = "served_amount"
     }
 
     public init(from decoder: any Decoder) throws {
@@ -89,6 +93,8 @@ public struct Estimate: Codable, Sendable, Hashable {
       nutritionSource = try c.decodeIfPresent(String.self, forKey: .nutritionSource)
       nutritionSourceId = try c.decodeIfPresent(String.self, forKey: .nutritionSourceId)
       portionEstimated = try c.decodeIfPresent(Bool.self, forKey: .portionEstimated)
+      servedAmount = (try? c.decodeIfPresent(Double.self, forKey: .servedAmount))?
+        .flatMap { $0.isFinite && $0 > 0 ? $0 : nil }
     }
   }
 
