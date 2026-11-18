@@ -1,5 +1,6 @@
 import EZHAKit
 import Foundation
+import UIKit
 
 enum LoggerFixtures {
   static let date = DateKey("2026-10-07")!
@@ -12,6 +13,19 @@ enum LoggerFixtures {
   static func state(_ scenario: String = "review") -> LoggerState {
     var state = LoggerState()
     guard scenario != "entry", scenario != "slowEstimate" else { return state }
+    if scenario.hasPrefix("restaurant") {
+      // Restaurant mode: no photos, both photos, or both photos with the eaten estimate.
+      state.restaurant = RestaurantPhotos()
+      guard scenario != "restaurant" else { return state }
+      state.photoId = "before"
+      state.restaurant?.leftoverPhotoId = "after"
+      guard scenario == "restaurantReview" else { return state }
+      state.items = LogItemMath.fromEstimate(restaurantEstimate())
+      state.estimateUsedPhoto = true
+      state.lastAnalyzed = AnalyzeGate.Fingerprint(
+        text: "", photoId: "before", isLabel: false, leftoverPhotoId: "after")
+      return state
+    }
     if scenario == "drink" {
       // "330 ml beer": one millilitre item, nutrition per 100 ml.
       state.text = "330 ml beer"
@@ -93,6 +107,37 @@ enum LoggerFixtures {
 
   static let drinkPer100ml = MacroTotals(calories: 43, protein: 0.5, carbs: 3.6, fat: 0)
 
+  /// Restaurant meal: steak and fries partly left, the salad all eaten. Amounts are eaten.
+  static func restaurantEstimate() -> Estimate {
+    func item(_ name: String, eaten: Double, served: Double, kcalPer100: Double) -> Estimate.Item {
+      .init(
+        name: name, grams: eaten,
+        macros: MacroTotals(
+          calories: kcalPer100 * eaten / 100, protein: 20 * eaten / 100,
+          carbs: 10 * eaten / 100, fat: 8 * eaten / 100),
+        notes: "Served about \(Int(served)) g.", portionEstimated: true, servedAmount: served)
+    }
+    return Estimate(
+      totals: .zero, source: "food_photo", foodName: "Steak frites",
+      items: [
+        item("Ribeye steak", eaten: 180, served: 250, kcalPer100: 291),
+        item("French fries", eaten: 60, served: 150, kcalPer100: 312),
+        item("Side salad", eaten: 80, served: 80, kcalPer100: 20),
+      ], nutritionBasis: .perPortion)
+  }
+
+  /// A plate-like placeholder photo for the restaurant slots.
+  static func restaurantPhoto(_ color: UIColor) -> Data {
+    UIGraphicsImageRenderer(size: CGSize(width: 240, height: 240)).pngData { context in
+      UIColor.systemGray5.setFill()
+      context.fill(CGRect(x: 0, y: 0, width: 240, height: 240))
+      UIColor.white.setFill()
+      context.cgContext.fillEllipse(in: CGRect(x: 30, y: 30, width: 180, height: 180))
+      color.setFill()
+      context.cgContext.fillEllipse(in: CGRect(x: 70, y: 70, width: 100, height: 100))
+    }
+  }
+
   /// A per-serving drink: 250 ml glass, values per 100 ml.
   static let drinkFood = SavedFood(
     id: UUID(), name: "Oat drink", unitType: .perServing, servingSize: 250,
@@ -151,9 +196,12 @@ enum LoggerFixtures {
   static func app(_ scenario: String = "review") -> AppModel {
     var clients = AppClients.preview
     clients.ai = AIClient(
-      estimateStream: { _ in
+      estimateStream: { request in
         AsyncThrowingStream { continuation in
-          if scenario == "slowEstimate" {
+          if request.inputType == EntryPayload.restaurantInputType {
+            continuation.yield(.result(restaurantEstimate()))
+            continuation.finish()
+          } else if scenario == "slowEstimate" {
             let task = Task {
               continuation.yield(.status("checking_details"))
               try? await Task.sleep(for: .seconds(3))

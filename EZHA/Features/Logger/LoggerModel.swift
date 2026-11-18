@@ -30,20 +30,36 @@ struct LoggerState: Codable, Equatable {
   /// A clarification's prior draft, retained across relaunch until the new estimate succeeds.
   var clarificationBaseline: Data?
   var nutritionEdits: [UUID: [String: String]]?
+  /// Set for a restaurant meal. The main photo is what was served. Nil in older drafts.
+  var restaurant: RestaurantPhotos?
 
-  var isEmpty: Bool { self == LoggerState(entryId: entryId) }
+  /// Restaurant mode without a photo of what is left counts as empty.
+  var isEmpty: Bool {
+    var state = self
+    if state.restaurant?.leftoverPhotoId == nil { state.restaurant = nil }
+    return state == LoggerState(entryId: entryId)
+  }
+}
+
+/// A restaurant meal's second photo: what is left after eating. Only the difference is logged.
+struct RestaurantPhotos: Codable, Equatable {
+  var leftoverPhotoId: String?
+  /// Names the photo of what is left in storage. A new photo gets a new id.
+  var uploadId = UUID()
+  var pendingLeftoverImagePath: String?
 }
 
 /// Draft operations are injectable so storage failures can be exercised without losing user data.
 struct LoggerDraftAccess {
-  var load: (DateKey) async throws -> (state: Data, imageData: Data?)?
-  var save: (DateKey, Data, Data?) async throws -> Void
+  var load: (DateKey) async throws -> LoggerDraftData?
+  /// Date, state, photo, and the restaurant photo of what is left.
+  var save: (DateKey, Data, Data?, Data?) async throws -> Void
   var delete: (DateKey) async throws -> Void
 
   static func live(_ store: DraftStore) -> Self {
     Self(
       load: { try await store.load($0) },
-      save: { try await store.save($0, state: $1, imageData: $2) },
+      save: { try await store.save($0, state: $1, imageData: $2, leftoverImageData: $3) },
       delete: { try await store.delete($0) })
   }
 }
@@ -74,12 +90,17 @@ final class LoggerModel {
   var imageData: Data? {
     didSet { if imageData != oldValue { scheduleDraftSave() } }
   }
+  /// Restaurant meals: the photo of what is left.
+  var leftoverImageData: Data? {
+    didSet { if leftoverImageData != oldValue { scheduleDraftSave() } }
+  }
   private(set) var stage: Stage?
   var errorMessage: String?
   private(set) var isSaving = false
   private(set) var isClosing = false
   private var savedState: LoggerState?
   private var savedImageData: Data?
+  private var savedLeftoverImageData: Data?
   /// The library item being added from "Add from library", while its ingredients load.
   private(set) var quickAddingId: UUID?
   /// Incremented after each estimate, for the item insert animation and haptics.
@@ -94,6 +115,8 @@ final class LoggerModel {
   @ObservationIgnored private var estimateTask: Task<Void, Never>?
   @ObservationIgnored private var uploadTask: Task<String, any Error>?
   @ObservationIgnored private var attachmentId = UUID()
+  @ObservationIgnored private var leftoverUploadTask: Task<String, any Error>?
+  @ObservationIgnored private var leftoverAttachmentId = UUID()
   @ObservationIgnored private var estimateId = UUID()
   @ObservationIgnored private var draftTask: Task<Void, Never>?
   @ObservationIgnored private var firstUnsavedChange: Date?
@@ -108,7 +131,18 @@ final class LoggerModel {
   // MARK: Derived state
 
   var fingerprint: AnalyzeGate.Fingerprint {
-    AnalyzeGate.Fingerprint(text: state.text, photoId: state.photoId, isLabel: state.isLabel)
+    AnalyzeGate.Fingerprint(
+      text: state.text, photoId: state.photoId, isLabel: state.isLabel,
+      leftoverPhotoId: state.restaurant?.leftoverPhotoId)
+  }
+
+  var isRestaurant: Bool { state.restaurant != nil }
+
+  /// A restaurant meal needs both photos; other meals need text or a photo.
+  var canEstimate: Bool {
+    isRestaurant
+      ? state.photoId != nil && state.restaurant?.leftoverPhotoId != nil
+      : fingerprint.hasInput
   }
 
   var primaryAction: AnalyzeGate.PrimaryAction {
@@ -121,9 +155,10 @@ final class LoggerModel {
 
   var isEstimating: Bool { stage != nil }
   /// Text, a photo, or items kept when the sheet closes.
-  var hasInput: Bool { !state.isEmpty || imageData != nil }
+  var hasInput: Bool { !state.isEmpty || imageData != nil || leftoverImageData != nil }
   var isDraftSaved: Bool {
     !isRestoring && savedState == state && savedImageData == imageData
+      && savedLeftoverImageData == leftoverImageData
   }
   var hasInvalidEdits: Bool {
     state.items.contains { NumericInput.portionError($0.gramsText) != nil }
@@ -148,6 +183,7 @@ final class LoggerModel {
     guard let previousEstimate else { return false }
     return !isEstimating && !isSaving && previousEstimate.photoId == state.photoId
       && previousEstimate.isLabel == state.isLabel
+      && previousEstimate.restaurant?.leftoverPhotoId == state.restaurant?.leftoverPhotoId
   }
 
   var suggestedMealName: String {
@@ -175,6 +211,7 @@ final class LoggerModel {
     {
       state = saved
       imageData = draft.imageData
+      leftoverImageData = draft.leftoverImageData
       previousEstimate = saved.clarificationBaseline.flatMap {
         try? JSONDecoder.ezha.decode(LoggerState.self, from: $0)
       }
@@ -186,6 +223,7 @@ final class LoggerModel {
     }
     savedState = state
     savedImageData = imageData
+    savedLeftoverImageData = leftoverImageData
     if let prefill = appModel.loggerPrefill {
       appModel.loggerPrefill = nil
       if state.text.isEmpty { state.text = prefill }
@@ -217,14 +255,16 @@ final class LoggerModel {
     firstUnsavedChange = nil
     let snapshot = state
     let photo = imageData
+    let leftover = leftoverImageData
     do {
-      if snapshot.isEmpty && photo == nil {
+      if snapshot.isEmpty && photo == nil && leftover == nil {
         try await drafts.delete(date)
       } else {
-        try await drafts.save(date, JSONEncoder.ezha.encode(snapshot), photo)
+        try await drafts.save(date, JSONEncoder.ezha.encode(snapshot), photo, leftover)
       }
       savedState = snapshot
       savedImageData = photo
+      savedLeftoverImageData = leftover
       return true
     } catch {
       return false
@@ -236,6 +276,9 @@ final class LoggerModel {
     uploadTask?.cancel()
     uploadTask = nil
     attachmentId = UUID()
+    leftoverUploadTask?.cancel()
+    leftoverUploadTask = nil
+    leftoverAttachmentId = UUID()
   }
 
   @discardableResult
@@ -250,20 +293,19 @@ final class LoggerModel {
       errorMessage = String(localized: "Your draft could not be discarded. Try again.")
       return false
     }
-    cancelEstimate()
-    uploadTask?.cancel()
-    uploadTask = nil
-    attachmentId = UUID()
+    stopBackgroundWork()
     isRestoring = true
     state = LoggerState()
     previousEstimate = nil
     imageData = nil
+    leftoverImageData = nil
     errorMessage = nil
     isRestoring = false
     draftTask?.cancel()
     firstUnsavedChange = nil
     savedState = state
     savedImageData = nil
+    savedLeftoverImageData = nil
     return true
   }
 
@@ -320,10 +362,73 @@ final class LoggerModel {
     state.labelGramsText = ""
   }
 
+  // MARK: Restaurant
+
+  /// Starts a restaurant meal. A food photo already attached becomes the photo of what was served.
+  func startRestaurant() {
+    guard !isRestaurant else { return }
+    if state.isLabel { removePhoto() }
+    state.restaurant = RestaurantPhotos()
+    errorMessage = nil
+  }
+
+  /// Back to the other ways to log. The photo of what was served stays as the meal photo.
+  func exitRestaurant() {
+    removeLeftoverPhoto()
+    state.restaurant = nil
+  }
+
+  /// Attaches the photo of what is left. Returns true when it is attached.
+  @discardableResult
+  func attachLeftoverPhoto(_ raw: Data) async -> Bool {
+    guard isRestaurant else { return false }
+    leftoverUploadTask?.cancel()
+    leftoverUploadTask = nil
+    let attachment = UUID()
+    leftoverAttachmentId = attachment
+    do {
+      let jpeg = try await ImageProcessing.jpeg(from: raw, forLabel: false)
+      guard leftoverAttachmentId == attachment, isRestaurant else { return false }
+      let photoId = UUID().uuidString
+      let uploadId = UUID()
+      leftoverImageData = jpeg
+      state.restaurant = RestaurantPhotos(leftoverPhotoId: photoId, uploadId: uploadId)
+      errorMessage = nil
+      if appModel.isAIConsentGiven {
+        leftoverUploadTask = Task { [weak self] in
+          guard let self else { throw CancellationError() }
+          do {
+            let path = try await uploadPhoto(jpeg, entryId: uploadId)
+            try Task.checkCancellation()
+            if state.restaurant?.leftoverPhotoId == photoId {
+              state.restaurant?.pendingLeftoverImagePath = path
+            }
+            return path
+          } catch {
+            if state.restaurant?.leftoverPhotoId == photoId { leftoverUploadTask = nil }
+            throw error
+          }
+        }
+      }
+      return true
+    } catch {
+      if leftoverAttachmentId == attachment { errorMessage = error.localizedDescription }
+      return false
+    }
+  }
+
+  func removeLeftoverPhoto() {
+    leftoverAttachmentId = UUID()
+    leftoverUploadTask?.cancel()
+    leftoverUploadTask = nil
+    leftoverImageData = nil
+    if isRestaurant { state.restaurant = RestaurantPhotos() }
+  }
+
   // MARK: Estimate
 
   func estimate() {
-    guard fingerprint.hasInput, !isEstimating, !isClosing else { return }
+    guard canEstimate, !isEstimating, !isClosing else { return }
     errorMessage = nil
     provisionalItems = []
     let currentEstimateId = UUID()
@@ -331,7 +436,10 @@ final class LoggerModel {
     let fingerprint = fingerprint
     let isLabel = state.isLabel
     let labelGrams = parseNumberInput(state.labelGramsText)
-    stage = imageData != nil && state.pendingImagePath == nil ? .uploading : .reading
+    let needsUpload =
+      (imageData != nil && state.pendingImagePath == nil)
+      || (leftoverImageData != nil && state.restaurant?.pendingLeftoverImagePath == nil)
+    stage = needsUpload ? .uploading : .reading
     estimateTask = Task { [weak self] in
       guard let self else { return }
       do {
@@ -370,10 +478,32 @@ final class LoggerModel {
       try Task.checkCancellation()
       state.pendingImagePath = imagePath
     }
+    var leftoverPath: String?
+    if let restaurant = state.restaurant, let leftoverImageData {
+      leftoverPath = restaurant.pendingLeftoverImagePath
+      if leftoverPath == nil {
+        stage = .uploading
+        do {
+          if let leftoverUploadTask {
+            leftoverPath = try await leftoverUploadTask.value
+          } else {
+            leftoverPath = try await uploadPhoto(leftoverImageData, entryId: restaurant.uploadId)
+          }
+        } catch {
+          try Task.checkCancellation()
+          leftoverPath = try await uploadPhoto(leftoverImageData, entryId: restaurant.uploadId)
+        }
+        try Task.checkCancellation()
+        state.restaurant?.pendingLeftoverImagePath = leftoverPath
+      }
+    }
     stage = .reading
     let request = EstimateRequest(
       text: state.text, items: nil, imagePath: imageData == nil ? nil : imagePath,
-      inputType: EntryPayload.analyzeInputType(hasPhoto: imageData != nil, isLabelPhoto: isLabel))
+      leftoverImagePath: leftoverPath,
+      inputType: leftoverPath != nil
+        ? EntryPayload.restaurantInputType
+        : EntryPayload.analyzeInputType(hasPhoto: imageData != nil, isLabelPhoto: isLabel))
     var result: Estimate?
     for try await event in clients.ai.estimateStream(request) {
       try Task.checkCancellation()

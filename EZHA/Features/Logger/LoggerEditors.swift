@@ -77,6 +77,10 @@ struct LoggerReviewItem: View {
         .fixedSize()
       }
 
+      if let served = item.servedAmount {
+        servedLine(served)
+      }
+
       if let error = NumericInput.portionError(item.gramsText, unit: item.unit) {
         Label(error, systemImage: "exclamationmark.circle")
           .font(.footnote)
@@ -160,6 +164,22 @@ struct LoggerReviewItem: View {
   }
 
   /// "Greek yogurt ⌄" over "60 kcal · P 10g · C 4g · F 0g". Tap to show or hide Nutrition details.
+  /// Restaurant meals: what was served and what is left, so the logged amount reads as eaten.
+  private func servedLine(_ served: Double) -> some View {
+    let left = LogItemMath.validGrams(item.gramsText).map { max(0, served - $0) } ?? 0
+    let servedText = item.unit.format(served, maxFractionDigits: 0)
+    let leftText = item.unit.format(left, maxFractionDigits: 0)
+    return Label {
+      Text(
+        left > 0 ? "Served about \(servedText) · \(leftText) left" : "Served about \(servedText)")
+    } icon: {
+      Image(systemName: "fork.knife")
+    }
+    .font(.footnote)
+    .foregroundStyle(.secondary)
+    .accessibilityIdentifier("servedAmount\(index)")
+  }
+
   private func nameToggle(_ macros: MacroTotals) -> some View {
     let kcal = Macros.format(macros.calories, maxFractionDigits: 0)
     let protein = Macros.format(macros.protein, maxFractionDigits: 0)

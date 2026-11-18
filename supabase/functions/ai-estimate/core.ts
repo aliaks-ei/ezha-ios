@@ -46,6 +46,11 @@ export type MealReading = {
   items: MealItem[];
   review: Review | null;
 };
+// A restaurant meal: `amount` is what was served (before photo), `left_amount` what is left (after photo).
+export type RestaurantItem = MealItem & { left_amount: number };
+export type RestaurantReading = Omit<MealReading, "items"> & {
+  items: RestaurantItem[];
+};
 export type Label = {
   basis: "per_100g" | "per_100ml" | "per_serving";
   calories_unit: "kcal" | "kJ";
@@ -74,6 +79,8 @@ export type EstimateItem = Macros & {
   nutrition_source: "usda" | "library" | "estimated" | "label";
   nutrition_source_id: string | null;
   portion_estimated: boolean;
+  // Restaurant meals only: the served amount in `unit`. `grams` is the amount eaten.
+  served_amount?: number;
 };
 export type Result = {
   items: EstimateItem[];
@@ -108,38 +115,42 @@ const fallbackSchema = object({
   fiber: nullable("number"),
 });
 
-export const mealSchema = object({
-  status: enumField(["ok", "not_food", "unclear"]),
-  food_name: nullable("string"),
-  items: {
-    type: "array",
-    items: object({
-      name: { type: "string" },
-      amount: { type: "number" },
-      unit: enumField(UNITS),
-      portion_basis: enumField([
-        "user_weight",
-        "user_quantity",
-        "visual_estimate",
-        "typical_portion",
-      ]),
-      identification: enumField(["clear", "uncertain"]),
-      catalog_id: nullable("string"),
-      fallback_per100g: { anyOf: [fallbackSchema, { type: "null" }] },
-      notes: { type: "string" },
-    }),
-  },
-  review: {
-    anyOf: [
-      object({
-        question: { type: "string" },
-        kind: enumField(["portion", "ingredient", "identity"]),
-        item_index: { type: "integer" },
+const mealSchemaFor = (restaurant: boolean) =>
+  object({
+    status: enumField(["ok", "not_food", "unclear"]),
+    food_name: nullable("string"),
+    items: {
+      type: "array",
+      items: object({
+        name: { type: "string" },
+        amount: { type: "number" },
+        ...(restaurant ? { left_amount: { type: "number" } } : {}),
+        unit: enumField(UNITS),
+        portion_basis: enumField([
+          "user_weight",
+          "user_quantity",
+          "visual_estimate",
+          "typical_portion",
+        ]),
+        identification: enumField(["clear", "uncertain"]),
+        catalog_id: nullable("string"),
+        fallback_per100g: { anyOf: [fallbackSchema, { type: "null" }] },
+        notes: { type: "string" },
       }),
-      { type: "null" },
-    ],
-  },
-});
+    },
+    review: {
+      anyOf: [
+        object({
+          question: { type: "string" },
+          kind: enumField(["portion", "ingredient", "identity"]),
+          item_index: { type: "integer" },
+        }),
+        { type: "null" },
+      ],
+    },
+  });
+export const mealSchema = mealSchemaFor(false);
+export const restaurantSchema = mealSchemaFor(true);
 
 export const labelSchema = object({
   status: enumField(["ok", "not_food", "unreadable"]),
@@ -182,8 +193,27 @@ export function buildModelBody(options: {
   items: ItemInput[];
   catalog: CatalogFood[];
   maxOutputTokens?: number;
+  // Restaurant meals: the before photo is `imageUrl`, the after photo is this one.
+  isRestaurant?: boolean;
+  leftoverImageUrl?: string | null;
 }) {
   const { model, isLabel, text, imageUrl, items, catalog } = options;
+  const isRestaurant = !isLabel && options.isRestaurant === true;
+  const restaurantRules = isRestaurant
+    ? [
+      "This is a restaurant meal with two photos of the same meal. Photo 1 (BEFORE) shows what was served. Photo 2 (AFTER) shows what was left at the end of the meal.",
+      "List each food or drink from the BEFORE photo. amount is the served amount seen in the BEFORE photo.",
+      "left_amount is how much of that same food is still left in the AFTER photo, in the same unit. Use 0 when none of it is left, for example an empty plate or glass.",
+      "Use plates, bowls, glasses and cutlery seen in both photos as scale. Compare each food between the two photos; never return a left_amount larger than amount.",
+      "Leftovers moved to a takeaway box or another plate in the AFTER photo still count as left.",
+      "If user text says a part was shared, given away or taken home, add that part to left_amount.",
+      "Never list a food that appears only in the AFTER photo. A food missing from the AFTER photo was eaten: left_amount 0.",
+      "Use visual_estimate as portion_basis unless the user states a served weight or volume.",
+      "If the photos show different meals, return unclear, empty items and null review.",
+      "A portion review question asks about the amount eaten, not the amount served.",
+      'User text such as "Chicken: 180 g eaten." states the amount eaten of that food: set amount to 180 and left_amount to 0, and use user_weight.',
+    ]
+    : [];
   const prompt = isLabel
     ? [
       "Read the nutrition label only. Do not estimate food nutrition or eaten portions.",
@@ -200,6 +230,7 @@ export function buildModelBody(options: {
       `User context: ${JSON.stringify(text)}`,
     ].join("\n")
     : [
+      ...restaurantRules,
       "Identify foods and their preparation, and estimate each amount. Return no totals.",
       "Use unit g (edible weight in grams) for foods. Use unit ml (volume in millilitres) for drinks and liquids measured by volume, such as beer, milk, juice, soda, wine, water or soup by the glass.",
       "Convert volume units to ml: 1 l = 1000 ml, 1 cl = 10 ml, 1 pint = 568 ml (UK) unless the user says US pint (473 ml), 1 fl oz = 30 ml.",
@@ -239,16 +270,35 @@ export function buildModelBody(options: {
     text: {
       format: {
         type: "json_schema",
-        name: isLabel ? "nutrition_label_v2" : "meal_recognition_v2",
+        name: isLabel
+          ? "nutrition_label_v2"
+          : isRestaurant
+          ? "restaurant_meal_v1"
+          : "meal_recognition_v2",
         strict: true,
-        schema: isLabel ? labelSchema : mealSchema,
+        schema: isLabel
+          ? labelSchema
+          : isRestaurant
+          ? restaurantSchema
+          : mealSchema,
       },
     },
     input: [{
       role: "user",
       content: [
         { type: "input_text", text: prompt },
-        ...(imageUrl
+        ...(isRestaurant && imageUrl && options.leftoverImageUrl
+          ? [
+            { type: "input_text", text: "Photo 1 (BEFORE): what was served." },
+            { type: "input_image", image_url: imageUrl, detail: "high" },
+            { type: "input_text", text: "Photo 2 (AFTER): what was left." },
+            {
+              type: "input_image",
+              image_url: options.leftoverImageUrl,
+              detail: "high",
+            },
+          ]
+          : imageUrl
           ? [{ type: "input_image", image_url: imageUrl, detail: "high" }]
           : []),
       ],
@@ -519,6 +569,82 @@ export function normalizeMeal(
       ? "Portions are estimates. Review quantities before logging."
       : "",
   };
+}
+
+/// Logs only what was eaten: served minus left, per food. Fully left foods are dropped.
+export function normalizeRestaurant(
+  reading: RestaurantReading,
+  catalog: CatalogFood[],
+): Result {
+  if (
+    reading.status !== "ok" || !Array.isArray(reading.items) ||
+    !reading.items.length || reading.items.length > 20
+  ) {
+    throw new Error(
+      reading.status === "not_food"
+        ? "No meal found. Retake the photo of what you ordered."
+        : "The meal isn't clear. Check that both photos show the same meal, or add a description.",
+    );
+  }
+  const kept = reading.items.flatMap((item, index) => {
+    const served = item.amount, left = item.left_amount;
+    if (
+      typeof served !== "number" || !Number.isFinite(served) || served <= 0 ||
+      served > 5000 || typeof left !== "number" || !Number.isFinite(left) ||
+      left < 0
+    ) {
+      throw new Error(
+        "Analysis returned an invalid portion. Retake the photos or add details.",
+      );
+    }
+    const leftover = Math.min(left, served);
+    const eaten = Math.round(served - leftover);
+    if (eaten < 1) return [];
+    const { left_amount: _, ...meal } = item;
+    return [{
+      index,
+      served: Math.round(served),
+      leftover: Math.round(leftover),
+      item: {
+        ...meal,
+        amount: eaten,
+        // The eaten amount comes from two visual estimates, unless nothing was left.
+        portion_basis: leftover > 0 ? "visual_estimate" : item.portion_basis,
+      } as MealItem,
+    }];
+  });
+  if (!kept.length) {
+    throw new Error(
+      "Nothing looks eaten. Check that the second photo shows what's left of the same meal.",
+    );
+  }
+  const reviewIndex = reading.review
+    ? kept.findIndex((k) => k.index === reading.review!.item_index)
+    : -1;
+  const result = normalizeMeal(
+    {
+      status: "ok",
+      food_name: reading.food_name,
+      items: kept.map((k) => k.item),
+      review: reading.review && reviewIndex >= 0
+        ? { ...reading.review, item_index: reviewIndex }
+        : null,
+    },
+    catalog,
+    "food_photo",
+  );
+  result.items = result.items.map((item, i) => {
+    const { served, leftover } = kept[i];
+    const restaurantNote = leftover > 0
+      ? `Served about ${served} ${item.unit}, about ${leftover} ${item.unit} left.`
+      : `Served about ${served} ${item.unit}, all eaten.`;
+    return {
+      ...item,
+      served_amount: served,
+      notes: `${restaurantNote} ${item.notes}`,
+    };
+  });
+  return result;
 }
 
 // The same resolver as iOS: prefer stored per-100-g values; only convert a serving with a known gram mass.

@@ -48,7 +48,7 @@ private struct LoggerContent: View {
   @Environment(\.dynamicTypeSize) private var dynamicTypeSize
   @Environment(\.colorScheme) private var colorScheme
   @State private var photoItem: PhotosPickerItem?
-  @State private var isPhotoLabel = false
+  @State private var photoTarget = PhotoTarget.food
   @State private var expandedId: UUID?
   @State private var isPhotosPresented = false
   @State private var isCameraPresented = false
@@ -166,15 +166,16 @@ private struct LoggerContent: View {
     .onChange(of: photoItem) { _, item in
       guard let item else { return }
       photoItem = nil
-      let isLabel = isPhotoLabel
+      let target = photoTarget
       Task {
         if let data = try? await item.loadTransferable(type: Data.self) {
-          await attachAndEstimate(data, isLabel: isLabel)
+          await attach(data, to: target)
         }
       }
     }
     .fullScreenCover(isPresented: $isCameraPresented) {
-      CameraPicker { data in Task { await attachAndEstimate(data, isLabel: false) } }
+      let target = photoTarget == .label ? PhotoTarget.food : photoTarget
+      CameraPicker { data in Task { await attach(data, to: target) } }
         .ignoresSafeArea()
     }
     .fullScreenCover(isPresented: $isScannerPresented) {
@@ -186,7 +187,10 @@ private struct LoggerContent: View {
       Button("Discard draft", role: .destructive) { discardAndClose() }
       Button("Keep editing", role: .cancel) {}
     } message: {
-      Text("The description, photo, and items are removed.")
+      Text(
+        model.isRestaurant
+          ? "The description, photos, and items are removed."
+          : "The description, photo, and items are removed.")
     }
     .onChange(of: scenePhase) { _, phase in
       if phase == .background { Task { await model.saveDraftNow() } }
@@ -237,31 +241,39 @@ private struct LoggerContent: View {
 
   private var composer: some View {
     VStack(alignment: .leading, spacing: 20) {
-      Text("What did you eat?")
+      Text(model.isRestaurant ? "Restaurant meal" : "What did you eat?")
         .font(.title2.weight(.semibold))
 
-      if !dynamicTypeSize.isAccessibilitySize { sourceTiles }
+      if model.isRestaurant {
+        restaurantPanel
+      } else if !dynamicTypeSize.isAccessibilitySize {
+        sourceTiles
+      }
 
       HStack(alignment: .bottom, spacing: 4) {
         TextField(
           "What did you eat?", text: $model.state.text,
           prompt: Text(
-            model.imageData == nil
-              ? "Or describe it, e.g. 150 g chicken and rice" : "Add details (optional)"),
+            model.isRestaurant
+              ? "Add details (optional), e.g. shared the fries"
+              : model.imageData == nil
+                ? "Or describe it, e.g. 150 g chicken and rice" : "Add details (optional)"),
           axis: .vertical
         )
         .lineLimit(dynamicTypeSize.isAccessibilitySize ? 1...10 : 2...6)
         .focused($isTextFocused)
         .accessibilityIdentifier("mealText")
         .padding(.vertical, 16)
-        Button("Choose from Photos", systemImage: "photo.on.rectangle") {
-          pickPhoto(isLabel: false)
+        if !model.isRestaurant {
+          Button("Choose from Photos", systemImage: "photo.on.rectangle") {
+            pickPhoto(.food)
+          }
+          .labelStyle(.iconOnly)
+          .font(.title3)
+          .frame(minWidth: 44, minHeight: 44)
+          .padding(.bottom, 6)
+          .accessibilityIdentifier("attachPhotos")
         }
-        .labelStyle(.iconOnly)
-        .font(.title3)
-        .frame(minWidth: 44, minHeight: 44)
-        .padding(.bottom, 6)
-        .accessibilityIdentifier("attachPhotos")
       }
       .padding(.leading, 16)
       .padding(.trailing, 6)
@@ -269,9 +281,9 @@ private struct LoggerContent: View {
       .disabled(model.isEstimating)
       .id("composerInput")
 
-      if dynamicTypeSize.isAccessibilitySize { sourceTiles }
+      if dynamicTypeSize.isAccessibilitySize && !model.isRestaurant { sourceTiles }
 
-      if let data = model.imageData, let image = UIImage(data: data) {
+      if !model.isRestaurant, let data = model.imageData, let image = UIImage(data: data) {
         photoPreview(image)
       }
 
@@ -294,29 +306,144 @@ private struct LoggerContent: View {
     .animation(.smooth, value: model.isEstimating)
   }
 
-  /// The three ways to start: a food photo, a nutrition label, or a saved food.
+  /// The four ways to start: a food photo, a nutrition label, a saved food, or a restaurant meal.
+  /// A 2 × 2 grid, or one column at accessibility sizes.
   private var sourceTiles: some View {
-    let layout =
+    let columns =
       dynamicTypeSize.isAccessibilitySize
-      ? AnyLayout(VStackLayout(spacing: 12)) : AnyLayout(HStackLayout(spacing: 12))
-    return layout {
+      ? [GridItem(.flexible())] : [GridItem(.flexible(), spacing: 12), GridItem(.flexible())]
+    return LazyVGrid(columns: columns, spacing: 12) {
       sourceTile("Photo of food", systemImage: "camera", id: "attachCamera") {
-        if CameraPicker.isAvailable { isCameraPresented = true } else { pickPhoto(isLabel: false) }
+        if CameraPicker.isAvailable {
+          photoTarget = .food
+          isCameraPresented = true
+        } else {
+          pickPhoto(.food)
+        }
       }
       sourceTile("Scan label", systemImage: "doc.text.viewfinder", id: "attachScan") {
         runAI {
           if DocumentScanner.isAvailable {
             isScannerPresented = true
           } else {
-            pickPhoto(isLabel: true)
+            pickPhoto(.label)
           }
         }
       }
       sourceTile("Saved foods", systemImage: "books.vertical", id: "attachLibrary") {
         isLibraryPresented = true
       }
+      sourceTile("Restaurant", systemImage: "fork.knife", id: "attachRestaurant") {
+        model.startRestaurant()
+      }
     }
     .disabled(model.isEstimating)
+  }
+
+  // MARK: Restaurant
+
+  /// Two photos, what was ordered and what is left. Only the difference is logged.
+  private var restaurantPanel: some View {
+    let layout =
+      dynamicTypeSize.isAccessibilitySize
+      ? AnyLayout(VStackLayout(spacing: 12))
+      : AnyLayout(HStackLayout(alignment: .top, spacing: 12))
+    return VStack(alignment: .leading, spacing: 12) {
+      Text("Add a photo of what you ordered and one of what's left. Only what you ate is logged.")
+        .font(.subheadline)
+        .foregroundStyle(.secondary)
+        .fixedSize(horizontal: false, vertical: true)
+      layout {
+        restaurantSlot(
+          "What you ordered", image: model.imageData, target: .before, id: "restaurantBefore")
+        restaurantSlot(
+          "What's left", image: model.leftoverImageData, target: .after, id: "restaurantAfter")
+      }
+      Button {
+        model.exitRestaurant()
+      } label: {
+        Label("Other ways to log", systemImage: "chevron.backward")
+          .font(.subheadline)
+          .frame(minHeight: 44)
+      }
+      .accessibilityIdentifier("exitRestaurant")
+    }
+    .disabled(model.isEstimating)
+  }
+
+  @ViewBuilder
+  private func restaurantSlot(
+    _ title: LocalizedStringKey, image data: Data?, target: PhotoTarget, id: String
+  ) -> some View {
+    if let data, let image = UIImage(data: data) {
+      VStack(alignment: .leading, spacing: 6) {
+        Color.clear
+          .frame(height: 140)
+          .frame(maxWidth: .infinity)
+          .overlay {
+            Image(uiImage: image).resizable().scaledToFill()
+          }
+          .clipShape(.rect(cornerRadius: 12))
+          .accessibilityElement()
+          .accessibilityLabel(Text(title))
+          .accessibilityAddTraits(.isImage)
+          .accessibilityIdentifier(id)
+          .overlay(alignment: .topTrailing) {
+            Button("Remove photo", systemImage: "xmark.circle.fill") {
+              if target == .before { model.removePhoto() } else { model.removeLeftoverPhoto() }
+            }
+            .labelStyle(.iconOnly)
+            .font(.title2)
+            .symbolRenderingMode(.palette)
+            .foregroundStyle(.white, .black.opacity(0.6))
+            .frame(width: 44, height: 44)
+            .accessibilityIdentifier("\(id)Remove")
+          }
+        Text(title)
+          .font(.subheadline.weight(.medium))
+      }
+      .frame(maxWidth: .infinity, alignment: .leading)
+    } else {
+      let tile = VStack(spacing: 8) {
+        Image(systemName: target == .before ? "takeoutbag.and.cup.and.straw" : "fork.knife")
+          .font(.title2)
+          .foregroundStyle(Color.brandPrimary)
+        Text(title)
+          .font(.subheadline.weight(.medium))
+          .multilineTextAlignment(.center)
+        Text("Add photo")
+          .font(.footnote)
+          .foregroundStyle(.secondary)
+      }
+      .frame(maxWidth: .infinity, minHeight: 140)
+      .padding(.horizontal, 8)
+      .foregroundStyle(.primary)
+      .background(Color.canvas, in: .rect(cornerRadius: 12))
+      .contentShape(.rect(cornerRadius: 12))
+      Group {
+        if CameraPicker.isAvailable {
+          Menu {
+            Button("Take photo", systemImage: "camera") {
+              photoTarget = target
+              isCameraPresented = true
+            }
+            Button("Choose from Photos", systemImage: "photo.on.rectangle") { pickPhoto(target) }
+          } label: {
+            tile
+          }
+        } else {
+          Button {
+            pickPhoto(target)
+          } label: {
+            tile
+          }
+        }
+      }
+      .buttonStyle(.plain)
+      .accessibilityLabel(Text(title))
+      .accessibilityHint("Adds a photo")
+      .accessibilityIdentifier(id)
+    }
   }
 
   private func sourceTile(
@@ -346,14 +473,28 @@ private struct LoggerContent: View {
     .accessibilityIdentifier(id)
   }
 
-  private func pickPhoto(isLabel: Bool) {
-    isPhotoLabel = isLabel
+  private func pickPhoto(_ target: PhotoTarget) {
+    photoTarget = target
     isPhotosPresented = true
   }
 
   /// A photo starts the estimate at once; text typed before it is included.
   private func attachAndEstimate(_ data: Data, isLabel: Bool) async {
     if await model.attachPhoto(data, isLabel: isLabel) { runAI(model.estimate) }
+  }
+
+  /// A restaurant meal estimates once both photos are attached.
+  private func attach(_ data: Data, to target: PhotoTarget) async {
+    switch target {
+    case .food: await attachAndEstimate(data, isLabel: false)
+    case .label: await attachAndEstimate(data, isLabel: true)
+    case .before:
+      if await model.attachPhoto(data, isLabel: false), model.canEstimate {
+        runAI(model.estimate)
+      }
+    case .after:
+      if await model.attachLeftoverPhoto(data), model.canEstimate { runAI(model.estimate) }
+    }
   }
 
   private func photoPreview(_ image: UIImage) -> some View {
@@ -505,7 +646,7 @@ private struct LoggerContent: View {
   private var isPrimaryDisabled: Bool {
     if model.isEstimating || model.isSaving || model.isClosing { return true }
     if model.primaryAction == .estimate || model.state.items.isEmpty {
-      return !model.fingerprint.hasInput
+      return !model.canEstimate
     }
     return model.hasInvalidEdits || AnalyzeGate.logBlockReason(model.state.items) != nil
   }
@@ -564,6 +705,16 @@ private struct LoggerContent: View {
     UIApplication.shared.sendAction(
       #selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
   }
+}
+
+/// Where a picked or taken photo goes.
+private enum PhotoTarget {
+  case food
+  case label
+  /// Restaurant meal: what was ordered.
+  case before
+  /// Restaurant meal: what is left.
+  case after
 }
 
 /// The day after this meal (PET-111): a calorie bar with this meal as its own segment, the

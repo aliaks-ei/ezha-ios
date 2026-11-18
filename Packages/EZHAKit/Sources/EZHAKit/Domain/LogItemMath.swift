@@ -28,12 +28,14 @@ public struct LogItem: Codable, Sendable, Hashable, Identifiable {
   public var aiConfidence: Double?
   public var aiNotes: String
   public var isNutritionMissing: Bool
+  /// Restaurant meals: the amount served, in `unit`. The amount logged is what was eaten.
+  public var servedAmount: Double?
 
   public init(
     id: UUID = UUID(), name: String, gramsText: String, unit: AmountUnit = .g,
     macroBasis: MacroBasis, baseGrams: Double, base: MacroTotals, origin: Origin,
     linkedFoodId: UUID? = nil, aiConfidence: Double? = nil, aiNotes: String = "",
-    isNutritionMissing: Bool = false
+    isNutritionMissing: Bool = false, servedAmount: Double? = nil
   ) {
     self.id = id
     self.name = name
@@ -47,11 +49,12 @@ public struct LogItem: Codable, Sendable, Hashable, Identifiable {
     self.aiConfidence = aiConfidence
     self.aiNotes = aiNotes
     self.isNutritionMissing = isNutritionMissing
+    self.servedAmount = servedAmount
   }
 
   enum CodingKeys: String, CodingKey {
     case id, name, gramsText, unit, macroBasis, baseGrams, base, origin, linkedFoodId
-    case aiConfidence, aiNotes, isNutritionMissing
+    case aiConfidence, aiNotes, isNutritionMissing, servedAmount
   }
 
   /// Drafts saved before PET-114 have no unit.
@@ -69,6 +72,7 @@ public struct LogItem: Codable, Sendable, Hashable, Identifiable {
     aiConfidence = try c.decodeIfPresent(Double.self, forKey: .aiConfidence)
     aiNotes = try c.decode(String.self, forKey: .aiNotes)
     isNutritionMissing = try c.decode(Bool.self, forKey: .isNutritionMissing)
+    servedAmount = try c.decodeIfPresent(Double.self, forKey: .servedAmount)
   }
 }
 
@@ -205,7 +209,8 @@ public enum LogItemMath {
         base: item.macros,
         origin: .ai,
         aiConfidence: item.confidence ?? estimate.confidence,
-        aiNotes: item.notes ?? estimate.notes
+        aiNotes: item.notes ?? estimate.notes,
+        servedAmount: item.servedAmount
       )
     }
   }

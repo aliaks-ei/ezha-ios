@@ -57,6 +57,9 @@ public enum EntryPayload {
     hasPhoto ? (isLabelPhoto ? "label_photo" : "food_photo") : "text"
   }
 
+  /// `inputType` for a restaurant meal: a photo of what was served and one of what is left.
+  public static let restaurantInputType = "restaurant_photos"
+
   /// Rows skip items with no name, amount ≤ 0, or missing nutrition.
   public static func entryItems(entryId: UUID, from items: [LogItem]) -> [FoodEntryItem] {
     items.compactMap { item in
@@ -115,11 +118,14 @@ public enum AnalyzeGate {
     public var text: String
     public var photoId: String?
     public var isLabel: Bool
+    /// Restaurant meals: the photo of what is left. Nil otherwise, and in older drafts.
+    public var leftoverPhotoId: String?
 
-    public init(text: String, photoId: String?, isLabel: Bool) {
+    public init(text: String, photoId: String?, isLabel: Bool, leftoverPhotoId: String? = nil) {
       self.text = text.trimmed
       self.photoId = photoId
       self.isLabel = isLabel
+      self.leftoverPhotoId = leftoverPhotoId
     }
 
     public var hasInput: Bool { !text.isEmpty || photoId != nil }
