@@ -77,6 +77,29 @@ public enum PreviewData {
       macros: MacroTotals(calories: 480, protein: 25, carbs: 60, fat: 15),
       notes: "Use low-sodium soy sauce."),
   ]
+
+  public static let menuSuggestions = [
+    MealSuggestion(
+      title: "Grilled chicken Caesar",
+      description: "Chicken breast, romaine, parmesan, about 350 g.",
+      macros: MacroTotals(calories: 520, protein: 46, carbs: 18, fat: 28), menuSection: "Salads",
+      orderTip: "Ask for the dressing on the side."),
+    MealSuggestion(
+      title: "Miso salmon bowl", description: "Salmon fillet over rice with greens.",
+      macros: MacroTotals(calories: 640, protein: 38, carbs: 62, fat: 24), menuSection: "Bowls",
+      orderTip: "Ask for half rice."),
+    MealSuggestion(
+      title: "Tomato soup", description: "A bowl of soup with bread, about 400 ml.",
+      macros: MacroTotals(calories: 310, protein: 8, carbs: 44, fat: 11), menuSection: "Starters"),
+    MealSuggestion(
+      title: "Steak frites", description: "Sirloin with fries and peppercorn sauce.",
+      macros: MacroTotals(calories: 980, protein: 52, carbs: 70, fat: 54), menuSection: "Mains",
+      orderTip: "Swap the fries for a side salad."),
+    MealSuggestion(
+      title: "Prawn tacos", description: "Two tacos with slaw.",
+      macros: MacroTotals(calories: 450, protein: 28, carbs: 40, fat: 18),
+      menuSection: "Small plates"),
+  ]
 }
 
 extension DayClient {
@@ -127,7 +150,8 @@ extension AIClient {
         continuation.finish()
       }
     },
-    suggestions: { _ in PreviewData.suggestions }
+    suggestions: { _ in PreviewData.suggestions },
+    menuSuggestions: { _ in PreviewData.menuSuggestions }
   )
 }
 

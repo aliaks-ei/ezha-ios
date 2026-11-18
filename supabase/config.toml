@@ -421,5 +421,8 @@ verify_jwt = false
 [functions.ai-suggestions]
 verify_jwt = false
 
+[functions.ai-menu-suggestions]
+verify_jwt = false
+
 [functions.delete-account]
 verify_jwt = false

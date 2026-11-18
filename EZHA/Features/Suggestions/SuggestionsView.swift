@@ -1,7 +1,9 @@
 import EZHAKit
+import PhotosUI
 import SwiftUI
 
 /// AI meal ideas that fit the remaining macros of the selected day.
+/// Cook suggests ideas to make; Eat out picks dishes from restaurant menu photos.
 struct SuggestionsView: View {
   @Environment(AppModel.self) private var appModel
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -16,17 +18,32 @@ struct SuggestionsView: View {
   @State private var refreshedAt = Date.now
   @State private var hasRequested = false
   @State private var consentAction: (() -> Void)?
+  @State private var mode: SuggestionRules.Mode
+  @State private var menu: MenuSuggestionsModel
+  @State private var isPhotosPresented = false
+  @State private var photoItems: [PhotosPickerItem] = []
+  @State private var isCameraPresented = false
+  @State private var isScannerPresented = false
+
+  init(mode: SuggestionRules.Mode = .cook, menu: MenuSuggestionsModel = MenuSuggestionsModel()) {
+    _mode = State(initialValue: mode)
+    _menu = State(initialValue: menu)
+  }
 
   private var date: DateKey { appModel.selectedDate }
   private var bundle: DayBundle? { appModel.dayStore.merged(date) }
   private var remaining: MacroTotals? {
     bundle.map { Macros.remaining(goals: $0.goals, totals: $0.totals) }
   }
+  private var resultAnimation: Animation {
+    reduceMotion ? .easeInOut(duration: 0.2) : .smooth(duration: 0.4)
+  }
 
   var body: some View {
     NavigationStack {
       ScrollView {
         VStack(alignment: .leading, spacing: 20) {
+          modePicker
           header
           if let hint = bundle.flatMap({ SuggestionRules.targetsHint(goals: $0.goals) }) {
             Label(hint, systemImage: "info.circle")
@@ -34,13 +51,15 @@ struct SuggestionsView: View {
               .foregroundStyle(.secondary)
           }
           form
-          actions
-          if let errorMessage {
-            Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
-              .foregroundStyle(Color.danger)
-              .font(.subheadline)
+          if mode == .cook {
+            actions
+            errorLabel(errorMessage)
+            results
+          } else {
+            menuActions
+            errorLabel(menu.errorMessage)
+            menuResults
           }
-          results
         }
         .padding()
         .frame(maxWidth: 700)
@@ -58,8 +77,51 @@ struct SuggestionsView: View {
         hasRequested = false
         suggestions = []
         errorMessage = nil
+        menu.resetResults()
+      }
+      .photosPicker(
+        isPresented: $isPhotosPresented, selection: $photoItems,
+        maxSelectionCount: max(menu.pagesLeft, 1), matching: .images
+      )
+      .onChange(of: photoItems) { _, items in
+        guard !items.isEmpty else { return }
+        photoItems = []
+        Task {
+          for item in items {
+            if let data = try? await item.loadTransferable(type: Data.self) {
+              await menu.add(data)
+            }
+          }
+        }
+      }
+      .fullScreenCover(isPresented: $isCameraPresented) {
+        CameraPicker { data in Task { await menu.add(data) } }
+          .ignoresSafeArea()
+      }
+      .fullScreenCover(isPresented: $isScannerPresented) {
+        DocumentScanner(maxPages: menu.pagesLeft) { data in Task { await menu.add(data) } }
+          .ignoresSafeArea()
       }
       .aiConsentAlert($consentAction)
+    }
+  }
+
+  private var modePicker: some View {
+    Picker("Where you'll eat", selection: $mode) {
+      Text("Cook").tag(SuggestionRules.Mode.cook)
+      Text("Eat out").tag(SuggestionRules.Mode.eatOut)
+    }
+    .pickerStyle(.segmented)
+    .accessibilityIdentifier("suggestionsMode")
+  }
+
+  @ViewBuilder
+  private func errorLabel(_ message: String?) -> some View {
+    if let message {
+      Label(message, systemImage: "exclamationmark.triangle.fill")
+        .foregroundStyle(Color.danger)
+        .font(.subheadline)
+        .accessibilityIdentifier("suggestionsError")
     }
   }
 
@@ -118,37 +180,10 @@ struct SuggestionsView: View {
         }
       }
       .pickerStyle(.segmented)
-      let minutes = HStack(spacing: 4) {
-        TextField("Minutes", value: $prepMinutes, format: .number)
-          .keyboardType(.numberPad)
-          .multilineTextAlignment(.trailing)
-          .fixedSize()
-          .monospacedDigit()
-        Text("min").foregroundStyle(.secondary)
-      }
-      Group {
-        if dynamicTypeSize.isAccessibilitySize {
-          VStack(alignment: .leading, spacing: 8) {
-            Text("Max prep")
-            HStack {
-              minutes
-              Spacer()
-              Stepper("Max prep", value: $prepMinutes, in: 5...240, step: 5).labelsHidden()
-            }
-          }
-        } else {
-          Stepper(value: $prepMinutes, in: 5...240, step: 5) {
-            HStack {
-              Text("Max prep")
-              Spacer()
-              minutes
-            }
-          }
-        }
-      }
-      .onChange(of: prepMinutes) { _, value in
-        let clamped = SuggestionRules.clampPrep(value)
-        if clamped != value { prepMinutes = clamped }
+      if mode == .cook {
+        prepRow
+      } else {
+        MenuPagesRow(model: menu, pick: pickMenuPage)
       }
       VStack(alignment: .leading, spacing: 6) {
         Text("Preferences (optional)").font(.subheadline.weight(.medium))
@@ -163,6 +198,41 @@ struct SuggestionsView: View {
       }
     }
     .padding(.vertical, 8)
+  }
+
+  private var prepRow: some View {
+    let minutes = HStack(spacing: 4) {
+      TextField("Minutes", value: $prepMinutes, format: .number)
+        .keyboardType(.numberPad)
+        .multilineTextAlignment(.trailing)
+        .fixedSize()
+        .monospacedDigit()
+      Text("min").foregroundStyle(.secondary)
+    }
+    return Group {
+      if dynamicTypeSize.isAccessibilitySize {
+        VStack(alignment: .leading, spacing: 8) {
+          Text("Max prep")
+          HStack {
+            minutes
+            Spacer()
+            Stepper("Max prep", value: $prepMinutes, in: 5...240, step: 5).labelsHidden()
+          }
+        }
+      } else {
+        Stepper(value: $prepMinutes, in: 5...240, step: 5) {
+          HStack {
+            Text("Max prep")
+            Spacer()
+            minutes
+          }
+        }
+      }
+    }
+    .onChange(of: prepMinutes) { _, value in
+      let clamped = SuggestionRules.clampPrep(value)
+      if clamped != value { prepMinutes = clamped }
+    }
   }
 
   private var actions: some View {
@@ -235,6 +305,119 @@ struct SuggestionsView: View {
     }
   }
 
+  // MARK: Eat out
+
+  private var menuActions: some View {
+    HStack(spacing: 12) {
+      Button {
+        requestMenu(variation: nil)
+      } label: {
+        Label("Get suggestions", systemImage: "sparkles")
+          .font(.headline)
+          .frame(maxWidth: .infinity, minHeight: 36)
+      }
+      .buttonStyle(.glassProminent)
+      .controlSize(.large)
+      .disabled(menu.isLoading || menu.pages.isEmpty || remaining == nil)
+      .accessibilityIdentifier("getMenuSuggestions")
+
+      if !menu.suggestions.isEmpty {
+        Menu {
+          Button("Other options", systemImage: "shuffle") {
+            requestMenu(variation: SuggestionRules.differentOptions)
+          }
+          Button("Regenerate by ingredients", systemImage: "carrot") {
+            requestMenu(variation: SuggestionRules.adjustIngredientsNote(notes))
+          }
+          .disabled(notes.trimmingCharacters(in: .whitespaces).isEmpty)
+        } label: {
+          Label("More", systemImage: "ellipsis")
+            .frame(minHeight: 36)
+        }
+        .buttonStyle(.glass)
+        .controlSize(.large)
+        .disabled(menu.isLoading || menu.pages.isEmpty)
+      }
+    }
+  }
+
+  @ViewBuilder
+  private var menuResults: some View {
+    if menu.isLoading {
+      VStack(spacing: 0) {
+        ForEach(PreviewData.menuSuggestions.prefix(SuggestionRules.menuCount)) { dish in
+          MenuDishRow(suggestion: dish, impact: "Leaves 170 kcal · Protein goal reached") {}
+          if dish.id != PreviewData.menuSuggestions.last?.id { Divider() }
+        }
+      }
+      .padding(.horizontal)
+      .background(Color.surface, in: .rect(cornerRadius: 20, style: .continuous))
+      .redacted(reason: .placeholder)
+      .shimmerBorder(true)
+      .accessibilityElement(children: .ignore)
+      .accessibilityLabel("Loading suggestions")
+    } else if menu.suggestions.isEmpty {
+      menuHowItWorks
+    } else {
+      let goals = bundle?.goals ?? .zero
+      let left = remaining ?? .zero
+      VStack(spacing: 0) {
+        ForEach(menu.suggestions) { dish in
+          MenuDishRow(
+            suggestion: dish,
+            impact: SuggestionRules.impactLine(dish.macros, remaining: left, goals: goals)
+          ) {
+            logDish(dish)
+          }
+          if dish.id != menu.suggestions.last?.id { Divider() }
+        }
+      }
+      .padding(.horizontal)
+      .background(Color.surface, in: .rect(cornerRadius: 20, style: .continuous))
+      .transition(reduceMotion ? AnyTransition.opacity : AnyTransition(.blurReplace))
+      .accessibilityElement(children: .contain)
+      .accessibilityIdentifier("menuSuggestions")
+    }
+  }
+
+  private var menuHowItWorks: some View {
+    DisclosureGroup("How it works") {
+      Text(
+        "Add photos of the menu. We read the dishes and pick five that fit your remaining calories and macros. Under each dish you see what it leaves for the day. Tap + to log one."
+      )
+      .font(.subheadline)
+      .foregroundStyle(.secondary)
+      .padding(.top, 8)
+    }
+    .accessibilityIdentifier("menuSuggestionsHelp")
+    .padding(.vertical, 8)
+  }
+
+  private func pickMenuPage(_ source: MenuPageSource) {
+    switch source {
+    case .scan: isScannerPresented = true
+    case .camera: isCameraPresented = true
+    case .photos: isPhotosPresented = true
+    }
+  }
+
+  private func requestMenu(variation: String?) {
+    let action = {
+      guard let remaining else { return }
+      Task {
+        await menu.fetch(
+          client: appModel.clients.ai, remaining: remaining, mealType: mealType,
+          preferences: notes, variation: variation, animation: resultAnimation)
+      }
+    }
+    if appModel.isAIConsentGiven { action() } else { consentAction = action }
+  }
+
+  private func logDish(_ dish: MealSuggestion) {
+    appModel.loggerPrefill = SuggestionRules.menuLoggerText(for: dish)
+    appModel.isLoggerRequested = true
+  }
+
   private var howItWorks: some View {
     DisclosureGroup("How it works") {
       Text(
@@ -269,7 +452,7 @@ struct SuggestionsView: View {
           maxPrepMinutes: SuggestionRules.clampPrep(prepMinutes), ingredientNotes: notes,
           variationNote: variation))
       remainingAtRequest = remaining
-      withAnimation(reduceMotion ? .easeInOut(duration: 0.2) : .smooth(duration: 0.4)) {
+      withAnimation(resultAnimation) {
         suggestions = result
       }
     } catch {

@@ -138,6 +138,30 @@ enum LoggerFixtures {
     }
   }
 
+  /// Two printed-menu pages for Eat out: a heading and dish lines on paper.
+  @MainActor
+  static func menuPages() -> [MenuSuggestionsModel.Page] {
+    ["Starters", "Mains"].map { heading in
+      let size = CGSize(width: 300, height: 400)
+      let image = UIGraphicsImageRenderer(size: size).image { context in
+        UIColor(white: 0.97, alpha: 1).setFill()
+        context.fill(CGRect(origin: .zero, size: size))
+        let title: [NSAttributedString.Key: Any] = [
+          .font: UIFont.boldSystemFont(ofSize: 28), .foregroundColor: UIColor.black,
+        ]
+        heading.draw(at: CGPoint(x: 24, y: 24), withAttributes: title)
+        UIColor.darkGray.setFill()
+        for row in 0..<8 {
+          let y = 90 + CGFloat(row) * 36
+          context.fill(CGRect(x: 24, y: y, width: 180, height: 10))
+          context.fill(CGRect(x: 240, y: y, width: 36, height: 10))
+        }
+      }
+      let jpeg = image.jpegData(compressionQuality: 0.8) ?? Data()
+      return MenuSuggestionsModel.Page(jpeg: jpeg, thumbnail: image)
+    }
+  }
+
   /// A per-serving drink: 250 ml glass, values per 100 ml.
   static let drinkFood = SavedFood(
     id: UUID(), name: "Oat drink", unitType: .perServing, servingSize: 250,
@@ -225,10 +249,35 @@ enum LoggerFixtures {
         if scenario == "suggestionsResults" { return PreviewData.suggestions }
         if scenario == "suggestionsLoading" { try await Task.sleep(for: .seconds(3)) }
         return []
+      },
+      menuSuggestions: { request in
+        if scenario == "suggestionsMenuFailure" {
+          throw AIError.message("Couldn't read the menu. Try a clearer photo.")
+        }
+        if scenario == "suggestionsMenuLoading" { try await Task.sleep(for: .seconds(3)) }
+        // Answers only when both fixture pages were sent, so results prove the photos went out.
+        guard request.images.count == 2, request.images.allSatisfy({ $0.hasPrefix("/9j/") })
+        else { throw AIError.message("The menu photos were not sent.") }
+        return PreviewData.menuSuggestions
       })
     if scenario == "slowLog" {
       // Offline: the log stays in the outbox, so the day shows it as a pending entry.
       clients.logging.logEntry = { _ in throw URLError(.notConnectedToInternet) }
+    }
+    if scenario.hasPrefix("suggestionsMenu") {
+      // 650 kcal, 40 g protein, 70 g carbs, and 20 g fat left of 2,000 / 120 / 200 / 70.
+      clients.day.fetchDay = { date in
+        var bundle = PreviewData.day
+        bundle.date = date
+        bundle.goals = MacroTotals(calories: 2000, protein: 120, carbs: 200, fat: 70)
+        bundle.entries = [
+          PreviewData.entry(
+            "Breakfast and lunch", MacroTotals(calories: 1350, protein: 80, carbs: 130, fat: 50),
+            minutesAgo: 240)
+        ]
+        bundle.totals = MacroTotals(calories: 1350, protein: 80, carbs: 130, fat: 50)
+        return bundle
+      }
     }
     if scenario == "todayOver" {
       clients.day.fetchDay = { date in
