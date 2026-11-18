@@ -446,11 +446,15 @@ struct SuggestionsView: View {
     errorMessage = nil
     defer { isLoading = false }
     do {
+      let history = appModel.suggestionHistory
       let result = try await appModel.clients.ai.suggestions(
         SuggestionsRequest(
           remaining: remaining, mealType: mealType,
           maxPrepMinutes: SuggestionRules.clampPrep(prepMinutes), ingredientNotes: notes,
-          variationNote: variation))
+          variationNote: variation, avoidTitles: history.recentTitles(),
+          localHour: date == appModel.today
+            ? Calendar.current.component(.hour, from: .now) : nil))
+      history.record(result)
       remainingAtRequest = remaining
       withAnimation(resultAnimation) {
         suggestions = result
