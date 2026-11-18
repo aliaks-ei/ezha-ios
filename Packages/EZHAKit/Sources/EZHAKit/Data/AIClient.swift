@@ -66,21 +66,54 @@ public struct SuggestionsRequest: Codable, Sendable, Hashable {
   }
 }
 
-/// Edge functions `ai-estimate` (streaming) and `ai-suggestions`.
+/// Dishes from restaurant menu photos that fit the remaining macros (`ai-menu-suggestions`).
+public struct MenuSuggestionsRequest: Codable, Sendable, Hashable {
+  public var remaining: MacroTotals
+  public var mealType: String
+  public var preferences: String?
+  public var variationNote: String?
+  /// Base64 JPEGs, one per menu page.
+  public var images: [String]
+
+  public init(
+    remaining: MacroTotals, mealType: SuggestionRules.MealType, preferences: String?,
+    variationNote: String?, photos: [Data]
+  ) {
+    self.remaining = remaining
+    self.mealType = mealType.rawValue
+    self.preferences = preferences?.trimmed.nonEmpty
+    self.variationNote = variationNote
+    self.images = photos.map { $0.base64EncodedString() }
+  }
+
+  enum CodingKeys: String, CodingKey {
+    case remaining
+    case mealType = "meal_type"
+    case preferences
+    case variationNote = "variation_note"
+    case images
+  }
+}
+
+/// Edge functions `ai-estimate` (streaming), `ai-suggestions`, and `ai-menu-suggestions`.
 public struct AIClient: Sendable {
   public var estimateStream:
     @Sendable (EstimateRequest) -> AsyncThrowingStream<EstimateEvent, any Error>
   public var suggestions: @Sendable (SuggestionsRequest) async throws -> [MealSuggestion]
+  public var menuSuggestions: @Sendable (MenuSuggestionsRequest) async throws -> [MealSuggestion]
 
   public init(
     estimateStream:
       @escaping @Sendable (EstimateRequest) -> AsyncThrowingStream<
         EstimateEvent, any Error
       >,
-    suggestions: @escaping @Sendable (SuggestionsRequest) async throws -> [MealSuggestion]
+    suggestions: @escaping @Sendable (SuggestionsRequest) async throws -> [MealSuggestion],
+    menuSuggestions:
+      @escaping @Sendable (MenuSuggestionsRequest) async throws -> [MealSuggestion]
   ) {
     self.estimateStream = estimateStream
     self.suggestions = suggestions
+    self.menuSuggestions = menuSuggestions
   }
 }
 
@@ -132,6 +165,16 @@ extension AIClient {
         throw FunctionCaller.error(from: data, status: response.statusCode)
       }
       return try MealSuggestion.parse(data)
+    },
+    menuSuggestions: { request in
+      let (bytes, response) = try await FunctionCaller.send(
+        "ai-menu-suggestions", body: request, stream: false)
+      var data = Data()
+      for try await byte in bytes { data.append(byte) }
+      guard (200..<300).contains(response.statusCode) else {
+        throw FunctionCaller.error(from: data, status: response.statusCode)
+      }
+      return try MealSuggestion.parse(data, limit: SuggestionRules.menuCount)
     }
   )
 }

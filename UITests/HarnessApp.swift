@@ -2,8 +2,10 @@ import EZHAKit
 import SwiftUI
 
 /// Shows one screen with fixture data. UI tests pick it with launch environment values:
-/// HARNESS_SCENARIO (see `LoggerFixtures.state`, plus "today", "libraryTab", and the water
-/// scenarios "todayWater…", "waterEntries", "waterAdd", "waterTargetEditor"),
+/// HARNESS_SCENARIO (see `LoggerFixtures.state`, plus "today", "libraryTab", the water
+/// scenarios "todayWater…", "waterEntries", "waterAdd", "waterTargetEditor", and the Eat out
+/// scenarios "suggestionsMenu", "suggestionsMenuEmpty", "suggestionsMenuLoading",
+/// "suggestionsMenuFailure"),
 /// HARNESS_APPEARANCE ("light" or "dark"), HARNESS_LARGE_TEXT ("1" for accessibility3).
 @main
 struct HarnessApp: App {
@@ -44,6 +46,23 @@ struct HarnessApp: App {
           MainShell()
         } else if scenario == "settings" {
           SettingsView()
+        } else if scenario.hasPrefix("suggestionsMenu") {
+          SuggestionsView(
+            mode: .eatOut,
+            menu: MenuSuggestionsModel(
+              pages: scenario == "suggestionsMenuEmpty" ? [] : LoggerFixtures.menuPages())
+          )
+          .safeAreaInset(edge: .bottom) {
+            // The shell opens the logger; here the request shows what it would be filled with.
+            if app.isLoggerRequested, let prefill = app.loggerPrefill {
+              Text(prefill)
+                .font(.footnote)
+                .padding()
+                .frame(maxWidth: .infinity)
+                .background(.thinMaterial)
+                .accessibilityIdentifier("loggerPrefill")
+            }
+          }
         } else if scenario.hasPrefix("suggestions") {
           SuggestionsView()
         } else if scenario == "auth" {

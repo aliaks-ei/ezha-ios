@@ -298,7 +298,7 @@ public struct SSEParser: Sendable {
   }
 }
 
-/// One `ai-suggestions` result.
+/// One `ai-suggestions` or `ai-menu-suggestions` result.
 public struct MealSuggestion: Codable, Sendable, Hashable, Identifiable {
   public var id = UUID()
   public var title: String
@@ -308,6 +308,10 @@ public struct MealSuggestion: Codable, Sendable, Hashable, Identifiable {
   public var carbs: Double
   public var fat: Double
   public var notes: String?
+  /// Menu suggestions: the menu heading the dish is under, for example "Mains".
+  public var menuSection: String?
+  /// Menu suggestions: one way to order the dish lighter.
+  public var orderTip: String?
 
   public var macros: MacroTotals {
     MacroTotals(calories: calories, protein: protein, carbs: carbs, fat: fat)
@@ -315,10 +319,13 @@ public struct MealSuggestion: Codable, Sendable, Hashable, Identifiable {
 
   enum CodingKeys: String, CodingKey {
     case title, description, calories, protein, carbs, fat, notes
+    case menuSection = "menu_section"
+    case orderTip = "order_tip"
   }
 
   public init(
-    title: String, description: String, macros: MacroTotals, notes: String? = nil
+    title: String, description: String, macros: MacroTotals, notes: String? = nil,
+    menuSection: String? = nil, orderTip: String? = nil
   ) {
     self.title = title
     self.description = description
@@ -327,10 +334,15 @@ public struct MealSuggestion: Codable, Sendable, Hashable, Identifiable {
     self.carbs = macros.carbs
     self.fat = macros.fat
     self.notes = notes
+    self.menuSection = menuSection
+    self.orderTip = orderTip
   }
 
   /// Parses `{ suggestions, error }`. An empty or missing list is an error.
-  public static func parse(_ data: Data) throws(AIError) -> [MealSuggestion] {
+  /// Keeps at most `limit` suggestions.
+  public static func parse(_ data: Data, limit: Int = SuggestionRules.count) throws(AIError)
+    -> [MealSuggestion]
+  {
     struct Raw: Decodable {
       var suggestions: [MealSuggestion]?
       var error: String?
@@ -342,6 +354,6 @@ public struct MealSuggestion: Codable, Sendable, Hashable, Identifiable {
     guard let list = raw.suggestions, !list.isEmpty else {
       throw AIError.message("Suggestions returned an invalid response.")
     }
-    return Array(list.prefix(3))
+    return Array(list.prefix(limit))
   }
 }

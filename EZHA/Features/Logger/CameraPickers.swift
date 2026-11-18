@@ -43,8 +43,9 @@ struct CameraPicker: UIViewControllerRepresentable {
   }
 }
 
-/// `VNDocumentCameraViewController`. Returns the first page as JPEG data.
+/// `VNDocumentCameraViewController`. Calls `onImage` with up to `maxPages` pages as JPEG data.
 struct DocumentScanner: UIViewControllerRepresentable {
+  var maxPages = 1
   var onImage: (Data) -> Void
   @Environment(\.dismiss) private var dismiss
 
@@ -67,8 +68,10 @@ struct DocumentScanner: UIViewControllerRepresentable {
     func documentCameraViewController(
       _ controller: VNDocumentCameraViewController, didFinishWith scan: VNDocumentCameraScan
     ) {
-      if scan.pageCount > 0, let data = scan.imageOfPage(at: 0).jpegData(compressionQuality: 0.9) {
-        parent.onImage(data)
+      for page in 0..<min(scan.pageCount, max(parent.maxPages, 1)) {
+        if let data = scan.imageOfPage(at: page).jpegData(compressionQuality: 0.9) {
+          parent.onImage(data)
+        }
       }
       parent.dismiss()
     }
